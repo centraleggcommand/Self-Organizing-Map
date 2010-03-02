@@ -36,9 +36,12 @@ class SomInsertion(data:SomEntry)
   }
       
   private def cycleThruNodes(nodes:List[Node], ticket:InputTicket):Node = {
-
+    new Node("",Map.empty[String,Double])
+  }
 
   private def calcNodeDistance(node:Node, ticket:InputTicket):Double = {
+    0.0
+  }
 
 
 

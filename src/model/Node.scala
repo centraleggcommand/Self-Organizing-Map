@@ -1,6 +1,7 @@
 package somservice
 
-class Node(id:String, weight:Map[String,Double])
+class Node(node_id:String, node_weight:Map[String,Double])
 {
-
+  val id = node_id
+  val weight = node_weight
 }

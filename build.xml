@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+
+<project name="som" default="model">
+
+  <target name="init">
+    <!-- Additional java libs -->
+    <property name="servlet.jar"
+      location="/usr/share/java/servlet-api-2.5.jar"/> 
+    <property name="httpclient.jar"
+      location="/usr/local/httpcomponents-client-4.0.1/lib/httpclient-4.0.1.jar"/>
+    <property name="httpcore.jar"
+      location="/usr/local/httpcomponents-core-4.0.1/lib/httpcore-4.0.1.jar"/>
+    <!-- Location of scala files -->
+    <property name="scala.dir"
+      location="/usr/share/java"/>
+    <property name="liftweb.dir"
+      location="/home/rod/scala-sandbox/liftweb"/>
+    <!-- Libraries used -->
+    <property name="scala-compiler.jar"
+      location="${scala.dir}/scala-compiler.jar"/>
+    <property name="scala-library.jar"
+      location="${scala.dir}/scala-library.jar"/>
+    <property name="class.dir"
+      location="classes"/>
+    <property name="lift-util.jar"
+      location="${liftweb.dir}/lift-util-1.0.jar"/>
+    <property name="lift-webkit.jar"
+      location="${liftweb.dir}/lift-webkit-1.0.jar"/>
+    <path id="scala.classpath">
+      <pathelement location="${scala-compiler.jar}"/>
+      <pathelement location="${scala-library.jar}"/>
+    </path>
+    <path id="build.classpath">
+      <path refid="scala.classpath"/>
+      <pathelement location="classes"/>
+      <pathelement location="${lift-util.jar}"/>
+      <pathelement location="${lift-webkit.jar}"/>
+      <pathelement location="${servlet.jar}"/>
+      <pathelement location="${httpclient.jar}"/>
+      <pathelement location="${httpcore.jar}"/>
+    </path>
+    <taskdef resource="scala/tools/ant/antlib.xml">
+      <classpath refid="scala.classpath"/>
+    </taskdef>
+  </target>
+
+  <target name="mkdirs" depends="init">
+    <mkdir dir="${class.dir}"/>
+  </target>
+
+  <target name="model" depends="init,mkdirs">
+    <scalac srcdir="src/model" 
+            destdir="classes"
+            classpathref="build.classpath"/>
+  </target>
+
+  <target name="driver" depends="model">
+    <scalac srcdir="src/test"
+            destdir="classes"
+            classpathref="build.classpath"/>
+  </target>
+
+  <target name="clean" depends="init">
+    <delete dir="${class.dir}"/>
+  </target>
+
+
+</project>
+
+

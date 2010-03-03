@@ -20,7 +20,7 @@ class FilterInput extends HttpServlet
     response.setContentType("text/html")
     val writerOut = response.getWriter()
     writerOut.println("Here is the word map content:<br/>")
-    writerOut.println(ticket.getWordCount.toString)
+    writerOut.println(ticket.getWordMap.toString)
     writerOut.flush()
   }
 }

@@ -7,7 +7,7 @@ import org.apache.http.util.EntityUtils;
 import org.apache.http.entity._
 import java.io._
 import scala.util.parsing.json._
-import jsonwriter.JsObject
+import jsonwriter._
 
 abstract class SomDbAgent(dbName:String)
 {
@@ -16,7 +16,7 @@ abstract class SomDbAgent(dbName:String)
   //The db name is used as the parent value for level zero nodes
   def getDbName:String
   //Create the first node for a map when an initial som insertion is made.
-  def addDbNode(wordMap:Map[String,Double]):String
+  def addDbNode(wordMap:Map[String,Double]):Option[String]
   //Create a list of nodes with common parent.
   //The list will be popped for each node compared against.
   //Trying to stay immutable, so the node comparison is expected to return
@@ -27,6 +27,7 @@ abstract class SomDbAgent(dbName:String)
 class CouchAgent(dbName:String) extends SomDbAgent(dbName)
 {
     val couchUri = "http://127.0.0.1:5984/"
+    val dbView = "_design/sominsert"
     val client = new DefaultHttpClient()
 
     override def createSom:String = {
@@ -37,26 +38,27 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
 
     override def getDbName = dbName
 
-    override def addDbNode(wordCount:Map[String,Double]):String = {
+    override def addDbNode(wordCount:Map[String,Double]):Option[String] = {
       val id = getUuid
+      val addr = couchUri + dbName + "/" + id
       //create json data
-      val myPut = new HttpPut(couchUri + dbName + "/" + id)
       val jdata1 = new JsObject(List(("maptype","node")))
       val jdata2 = jdata1.addField(("parent",dbName))
       val jdata3 = jdata2.addField(("weight",wordCount.toList))
       val jsonData = jdata3.toJson
-      val entityData = new StringEntity(jsonData)
-      myPut.setEntity(entityData)
-      val response = client.execute(myPut)
-      //val rEnt = response.getEntity()
-      //val rdat = EntityUtils.toString(rEnt)
-      id
+      val response = dbPut(addr, jsonData)
+      val rdat = JSON.parse(response)
+      rdat match {
+        case Some(("error",_)::_) => None
+        case Some(_) => Some(id)
+        case _ => None
+      }
     }
 
     override def getNodesUsingParent(parent:String):Option[List[Node]] = {
       //call predefined db fxn for specific parent; whenever a new level is 
       //created for a node, a parent fxn should be defined in db
-      val jsonData = dbGet(couchUri + dbName + "/_design/sominsert/_view/" + parent)
+      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + parent)
       //convert the json data
       val data = JSON.parse(jsonData)
       data match {
@@ -93,14 +95,29 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val result = JSON.parse(jsonResult)
       result match {
         case Some(("error",_)::rest) => false
-        case Some(("ok",_)::rest) => true
+        case Some(("ok",_)::rest) => {
+          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,dbName))
+          val jsonData = fxnObj.toJson
+          println(jsonData)
+          val response = dbPut(couchUri + dbName + "/" + dbView, jsonData)
+          true
+        }
         case _ => false
       }
     }
 
     private def dbPut(request:String):String = {
-      val httpput = new HttpPut(request)
-      val response = client.execute(httpput)
+      val httpPut = new HttpPut(request)
+      val response = client.execute(httpPut)
+      val rEnt = response.getEntity()
+      EntityUtils.toString(rEnt)
+    }
+
+    private def dbPut(request:String, data:String):String = {
+      val httpPut = new HttpPut(request)
+      val entityData = new StringEntity(data)
+      httpPut.setEntity(entityData)
+      val response = client.execute(httpPut)
       val rEnt = response.getEntity()
       EntityUtils.toString(rEnt)
     }

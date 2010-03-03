@@ -20,13 +20,13 @@ class SomInsertion(data:SomEntry)
     }
   }
   //compare the entry weight to node weights at each required level
-  private def cycleThruLevels(dbAgent:SomDbAgent, parent:String, ticket:InputTicket):String = {
+  private def cycleThruLevels(dbAgent:SomDbAgent, parent:String, ticket:InputTicket):Option[String] = {
     //level zero map nodes have the db name as the parent value
     dbAgent.getNodesUsingParent(parent) match {
       //either no nodes exist (new map) or node is not a parent
       case None => {
         if (parent == dbAgent.getDbName) dbAgent.addDbNode(ticket.getWordMap) 
-        else parent
+        else Some(parent)
       }
       case Some(levelNodes) => {
         val matchedNode = cycleThruNodes(levelNodes, ticket)

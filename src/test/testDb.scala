@@ -13,6 +13,8 @@ object TestDb {
       dbagent.addDbNode(testmap2)
       val testmap3 = Map("diet"->76.0)
       dbagent.addDbNode(testmap3)
+      val mynodes = dbagent.getNodesUsingParent(args(0))
+      println(mynodes.toString)
     }
   }
 }

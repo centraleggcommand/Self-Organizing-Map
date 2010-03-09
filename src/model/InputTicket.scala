@@ -4,9 +4,9 @@ package textprocessing
 
 class InputTicket( doc:List[String]) {
   
-  def getWordMap:Map[String,Double] = parseList(doc)
+  val wordMap = parseList
   //create a representation of the doc's word usage
-  private def parseList(wordList:List[String]):Map[String,Double] = {
+  private def parseList:Map[String,Double] = {
     //defining a helper fxn 
     def createMap(remList:List[String],incMap:Map[String,Double]):Map[String,Double] = {
       remList match {
@@ -19,7 +19,7 @@ class InputTicket( doc:List[String]) {
         }
       }
     }
-    createMap(wordList,Map.empty[String,Double])
+    createMap(doc,Map.empty[String,Double])
   }
 // ** a head recursive implementation that is not as memory efficient
 //    wordList match {

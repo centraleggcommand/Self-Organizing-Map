@@ -12,9 +12,16 @@ object JsFxn {
     //return a representation consistent with jsonparse lib
     (fxnName,List(("map",fxnbody)))
   }
+  
+  def getGlobalWordFxn(parent:String, fxnName:String):Tuple2[String,Any] = {
+    val mapBody = """function(doc) { if( doc.maptype == \"node\" && doc.parent  == \""" + "\"" + parent + """\") { for( var wc in doc.weight ) { emit(wc,doc.weight[wc]); }}}"""
+    val reduceBody = "function(keys,values) { return sum(values) }"
+    (fxnName,List(("map",mapBody),("reduce",reduceBody)))
+  }
 
-  def getInitView(viewName:String, parent:String, fxnName:String):List[Tuple2[Any,Any]] = {
-    List(("_id",viewName),("views",List(getNodeParentFxn(parent,fxnName))))
+
+  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String):List[Tuple2[Any,Any]] = {
+    List(("_id",viewName),("views",List(getNodeParentFxn(parent,pFxn), getGlobalWordFxn(parent,wFxn))))
   }
 
 }

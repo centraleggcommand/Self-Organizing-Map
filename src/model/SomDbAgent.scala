@@ -22,12 +22,14 @@ abstract class SomDbAgent(dbName:String)
   //Trying to stay immutable, so the node comparison is expected to return
   //a node id.
   def getNodesUsingParent(parent:String):Option[List[Node]] 
+  def getGlobalWordCount(word:String):Option[Double]
 }
 
 class CouchAgent(dbName:String) extends SomDbAgent(dbName)
 {
     val couchUri = "http://127.0.0.1:5984/"
     val dbView = "_design/sominsert"
+    val wordView = "globalWeight"
     val client = new DefaultHttpClient()
 
     override def createSom:String = {
@@ -72,6 +74,20 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       }
     }
 
+    override def getGlobalWordCount(word:String):Option[Double] = {
+      val req = couchUri + dbName + "/" + dbView + "/_view/" + wordView + "?group=true&key=%22" + word + "%22"
+      val jsonData = dbGet( req )
+      val data = JSON.parse(jsonData)
+      println(data.toString)
+      data match {
+        //check if the parent fxn existed
+        case Some(("error",_)::rest) => None
+        //extract data
+        case Some(List(("rows",List(List(("key",_),("value",num:Double)))))) => Some(num)
+        case _ => None
+      }
+    }
+
     private def pkgNodes(rows:List[Any]):List[Node] = {
       for (row <- rows) yield {
         row match {
@@ -96,7 +112,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       result match {
         case Some(("error",_)::rest) => false
         case Some(("ok",_)::rest) => {
-          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,dbName))
+          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,dbName,wordView))
           val jsonData = fxnObj.toJson
           println(jsonData)
           val response = dbPut(couchUri + dbName + "/" + dbView, jsonData)

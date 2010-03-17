@@ -13,8 +13,15 @@ object TestDb {
       dbagent.addDbNode(testmap2)
       val testmap3 = Map("diet"->76.0)
       dbagent.addDbNode(testmap3)
-      val mynodes = dbagent.getNodesUsingParent(args(0))
-      println(mynodes.toString)
+      val result = dbagent.getNodesUsingParent(args(0))
+      result match {
+        case Some(mynodes) => {
+          for( node <- mynodes) {
+            println(node.weight.toString)
+          }
+        }
+        case None => println("Fxn getNodesUsingParent rtn empty")
+      }
     }
   }
 }

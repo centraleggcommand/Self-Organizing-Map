@@ -11,18 +11,24 @@ import jsonwriter._
 
 abstract class SomDbAgent(dbName:String)
 {
-  //Create a new map
+  //Create a new map and return status msg
   def createSom():String
   //The db name is used as the parent value for level zero nodes
   def getDbName:String
-  //Create the first node for a map when an initial som insertion is made.
+  //Create the first node for a map when an initial som insertion is made
+  //and return the node id if db fxn succeeded.
   def addDbNode(wordMap:Map[String,Double]):Option[String]
+  //Change the values of a node's weight due to an insertion
+  //and return status msg
+  def updateNode(n:Node):String
+  //Add content into the database and return status msg.
+  def addEntry(parent:String, deviation:Double, content:String):String
   //Create a list of nodes with common parent.
-  //The list will be popped for each node compared against.
-  //Trying to stay immutable, so the node comparison is expected to return
-  //a node id.
   def getNodesUsingParent(parent:String):Option[List[Node]] 
+  //Get the number of times a word appears in the entire som
   def getGlobalWordCount(word:String):Option[Double]
+  //Get the number of documents mapped to a node
+  def getChildDocNum(parent:String):Option[Double]
 }
 
 class CouchAgent(dbName:String) extends SomDbAgent(dbName)
@@ -30,6 +36,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
     val couchUri = "http://127.0.0.1:5984/"
     val dbView = "_design/sominsert"
     val wordView = "globalWeight"
+    val childView = "allChildren"
     val client = new DefaultHttpClient()
 
     override def createSom:String = {
@@ -52,10 +59,82 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val rdat = JSON.parse(response)
       rdat match {
         case Some(("error",_)::_) => None
-        case Some(_) => Some(id)
+        case Some(_) => {
+          addPositionDoc(id)
+          Some(id)
+        }
         case _ => None
       }
     }
+
+    private def addPositionDoc(nodeId:String) = {
+      val id = getUuid
+      val addr = couchUri + dbName + "/" + id
+      //create json data
+      val jdata1 = new JsObject(List(("maptype","position")))
+      val jdata2 = jdata1.addField(("grid",List(List(nodeId))))
+      val jsonData = jdata2.toJson
+      val response = dbPut(addr, jsonData)
+      val rdat = JSON.parse(response)
+      rdat match {
+        case Some(("error",_)::_) => throw new RuntimeException("Could not create a position doc for initial node")
+        case _ => "Position doc created"
+      }
+    }  
+
+    override def updateNode(upData:Node):String = {
+      //get the revision number for the doc
+      val revRequest = couchUri + dbName + "/" + upData.id
+      val jsonData = dbGet(revRequest)
+      val data = JSON.parse(jsonData)
+      //extract rev and parent values
+      val retrievedData:Tuple2[String,String] = data match {
+        case Some(nodeData:List[_]) => {
+          val revField = nodeData.find((field) => field match { case ("_rev",_) => true; case _ => false} )
+          val rev = revField match {
+            case Some((_,r:String)) => r
+            case None => throw new RuntimeException("updateNode found a node with no rev") }
+          val parentField = nodeData.find((field) => field match { case ("parent",_) => true; case _ => false} )
+          val parent = parentField match {
+            case Some((_,p:String)) => p
+            case None => throw new RuntimeException("updateNode found a node with no parent")
+          }
+          //My return values
+          (rev, parent)
+        }
+        case _ => throw new RuntimeException("Could not get node data from database")
+      }
+      val jdata1 = new JsObject(List(("maptype","node")))
+      val jdata2 = jdata1.addField(("parent",retrievedData._2))
+      val jdata3 = jdata2.addField(("weight",upData.weight.toList))
+      val jdata4 = jdata3.addField(("_rev",retrievedData._1))
+      val jsonSend = jdata4.toJson
+      val response = dbPut(revRequest, jsonSend)
+      val rdat = JSON.parse(response)
+      rdat match {
+        case Some(List(("error",_),("reason",reason))) => "Error: " + reason
+        case Some(a) => "Updated node: " + a
+        case None => "Likely error in updateNode attempt"
+      }
+    }
+
+    override def addEntry(parent:String, deviation:Double, content:String):String = {
+      val id = getUuid
+      val addr = couchUri + dbName + "/" + id
+      //create json data
+      val jdata1 = new JsObject(List(("maptype","entry")))
+      val jdata2 = jdata1.addField(("parent",parent))
+      val jdata3 = jdata2.addField(("deviation",deviation))
+      val jdata4 = jdata3.addField(("content",content))
+      val jsonData = jdata4.toJson
+      val response = dbPut(addr, jsonData)
+      val rdat = JSON.parse(response)
+      rdat match {
+        case Some(List(("error",_),("reason",r:String))) => "Error: " + r
+        case Some(info) => "Added entry - " + info
+        case None => "Hmm... database quiet on addEntry"
+      }
+    }  
 
     override def getNodesUsingParent(parent:String):Option[List[Node]] = {
       //call predefined db fxn for specific parent; whenever a new level is 
@@ -88,20 +167,35 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       }
     }
 
+    override def getChildDocNum(parent:String):Option[Double] = {
+      val req = couchUri + dbName + "/" + dbView + "/_view/" + childView
+      val jsonData = dbGet( req )
+      val data = JSON.parse(jsonData)
+      println(data.toString)
+      data match {
+        //check if the parent fxn existed
+        case Some(("error",_)::rest) => None
+        //extract data
+        case Some(List(("rows",List(List(("key",_),("value",num:Double)))))) => Some(num)
+        case _ => None
+      }
+    }
+
     private def pkgNodes(rows:List[Any]):List[Node] = {
       for (row <- rows) yield {
         row match {
           case List(("id",id:String),_,("value",dataList:List[_])) => {
             val weights = for (factor <- dataList) yield {
               factor match {
-                case List(("word",myword:String),("count",usage:Double)) => {
+                case (myword:String,usage:Double) => {
                   (myword,usage) }
                 case _ => ("unmatched pair",0.0)
               }
             }
             new Node(id, (Map.empty[String,Double] ++ weights))
           }
-          case _ => new Node("",Map("unmatched row"->0.0))
+          case List(("id",id:String),_,("value",_)) => new Node(id, Map.empty[String,Double])
+          case _ => new Node("NoID",Map("unmatched row"->0.0))
         }
       }
     }
@@ -112,7 +206,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       result match {
         case Some(("error",_)::rest) => false
         case Some(("ok",_)::rest) => {
-          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,dbName,wordView))
+          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,dbName,wordView,childView))
           val jsonData = fxnObj.toJson
           println(jsonData)
           val response = dbPut(couchUri + dbName + "/" + dbView, jsonData)

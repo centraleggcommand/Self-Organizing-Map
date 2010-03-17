@@ -19,9 +19,16 @@ object JsFxn {
     (fxnName,List(("map",mapBody),("reduce",reduceBody)))
   }
 
+  def getChildrenFxn(parent:String, fxnName:String):Tuple2[String,Any] = {
+    val mapBody = """function(doc) { if( doc.maptype == \"entry\" && doc.parent == \""" + "\"" + parent + """\"){ emit( doc.parent,doc.id);}}"""
+    //return a representation consistent with jsonparse lib
+    val reduceBody = "function(keys,values) { return sum(values) }"
+    (fxnName,List(("map",mapBody),("reduce",reduceBody)))
+  }
 
-  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String):List[Tuple2[Any,Any]] = {
-    List(("_id",viewName),("views",List(getNodeParentFxn(parent,pFxn), getGlobalWordFxn(parent,wFxn))))
+
+  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String, cFxn:String):List[Tuple2[Any,Any]] = {
+    List(("_id",viewName),("views",List(getNodeParentFxn(parent,pFxn), getGlobalWordFxn(parent,wFxn),getChildrenFxn(parent,cFxn))))
   }
 
 }

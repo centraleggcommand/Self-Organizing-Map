@@ -157,7 +157,6 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val req = couchUri + dbName + "/" + dbView + "/_view/" + wordView + "?group=true&key=%22" + word + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
-      println(data.toString)
       data match {
         //check if the parent fxn existed
         case Some(("error",_)::rest) => None
@@ -171,7 +170,6 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val req = couchUri + dbName + "/" + dbView + "/_view/" + childView
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
-      println(data.toString)
       data match {
         //check if the parent fxn existed
         case Some(("error",_)::rest) => None
@@ -208,7 +206,6 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
         case Some(("ok",_)::rest) => {
           val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,dbName,wordView,childView))
           val jsonData = fxnObj.toJson
-          println(jsonData)
           val response = dbPut(couchUri + dbName + "/" + dbView, jsonData)
           true
         }

@@ -10,6 +10,14 @@
       location="/usr/local/httpcomponents-client-4.0.1/lib/httpclient-4.0.1.jar"/>
     <property name="httpcore.jar"
       location="/usr/local/httpcomponents-core-4.0.1/lib/httpcore-4.0.1.jar"/>
+    <property name="logging.dir"
+	    location="/usr/share/java"/>
+    <property name="logging.jar"
+	    location="${logging.dir}/commons-logging-1.1.1.jar"/>
+    <property name="logging-api.jar"
+	    location="${logging.dir}/commons-logging-api-1.1.1.jar"/>
+    <property name="logging-adapters.jar"
+	    location="${logging.dir}/commons-logging-adapters-1.1.1.jar"/>
     <!-- Location of scala files -->
     <property name="scala.dir"
       location="/usr/share/java"/>
@@ -38,6 +46,9 @@
       <pathelement location="${servlet.jar}"/>
       <pathelement location="${httpclient.jar}"/>
       <pathelement location="${httpcore.jar}"/>
+      <pathelement location="${logging.jar}"/>
+      <pathelement location="${logging-api.jar}"/>
+      <pathelement location="${logging-adapters.jar}"/>
     </path>
     <taskdef resource="scala/tools/ant/antlib.xml">
       <classpath refid="scala.classpath"/>

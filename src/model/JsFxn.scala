@@ -26,9 +26,14 @@ object JsFxn {
     (fxnName,List(("map",mapBody),("reduce",reduceBody)))
   }
 
+  def getPositionFxn(parent:String, fxnName:String):Tuple2[String,Any] = {
+    val fxnbody = """function(doc) { if( doc.maptype == \"position\" && doc.parent == \""" + "\"" + parent + """\"){ emit( doc.parent,doc.grid);}}"""
+    //return a representation consistent with jsonparse lib
+    (fxnName,List(("map",fxnbody)))
+  }
 
-  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String, cFxn:String):List[Tuple2[Any,Any]] = {
-    List(("_id",viewName),("views",List(getNodeParentFxn(parent,pFxn), getGlobalWordFxn(parent,wFxn),getChildrenFxn(parent,cFxn))))
+  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String, cFxn:String, posFxn:String):List[Tuple2[Any,Any]] = {
+    List(("_id",viewName),("views",List(getNodeParentFxn(parent,pFxn), getGlobalWordFxn(parent,wFxn),getChildrenFxn(parent,cFxn),getPositionFxn(parent,posFxn))))
   }
 
 }

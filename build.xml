@@ -18,6 +18,8 @@
 	    location="${logging.dir}/commons-logging-api-1.1.1.jar"/>
     <property name="logging-adapters.jar"
 	    location="${logging.dir}/commons-logging-adapters-1.1.1.jar"/>
+    <property name="log4j.jar"
+	    location="${logging.dir}/log4j-1.2.jar"/>
     <!-- Location of scala files -->
     <property name="scala.dir"
       location="/usr/share/java"/>
@@ -49,6 +51,7 @@
       <pathelement location="${logging.jar}"/>
       <pathelement location="${logging-api.jar}"/>
       <pathelement location="${logging-adapters.jar}"/>
+      <pathelement location="${log4j.jar}"/>
     </path>
     <taskdef resource="scala/tools/ant/antlib.xml">
       <classpath refid="scala.classpath"/>

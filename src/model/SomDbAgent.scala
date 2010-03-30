@@ -14,6 +14,8 @@ import org.apache.http.impl.conn.tsccm._
 import org.apache.http.util.EntityUtils;
 import org.apache.http.entity._
 import org.apache.commons.logging._
+import org.apache.log4j.Logger
+import org.apache.log4j.PropertyConfigurator
 import java.io._
 import scala.util.parsing.json._
 import jsonwriter._
@@ -21,7 +23,7 @@ import jsonwriter._
 abstract class SomDbAgent(dbName:String)
 {
   //Create a new map and return status msg
-  def createSom():String
+  def createSom():Boolean
   //Release socket resources
   def shutdown:Unit
   //The db name is used as the parent value for level zero nodes
@@ -31,13 +33,13 @@ abstract class SomDbAgent(dbName:String)
   def addInitNode(parent:String, wordMap:Map[String,Double]):Option[String]
   //Change the values of a node's weight due to an insertion
   //and return status msg
-  def updateNode(n:Node):String
+  def updateNode(n:Node):Boolean
   //Add content into the database and return status msg.
-  def addEntry(parent:String, deviation:Double, content:String):String
+  def addEntry(parent:String, deviation:Double, content:String):Boolean
   //Get a representation of the location of every node on a som layer
   def getPositionDoc(parent:String):Option[Tuple2[String,List[Any]]]
   //Change the position data
-  def updatePositionDoc(mapId:String, posData:List[Any])
+  def updatePositionDoc(mapId:String, posData:List[Any]):Boolean
   //Create a list of nodes with common parent.
   def getNodesUsingParent(parent:String):Option[List[Node]] 
   //Get the number of times a word appears in the entire som
@@ -72,15 +74,21 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val cm:ClientConnectionManager = new ThreadSafeClientConnManager(params, schemeRegistry)
       new DefaultHttpClient(cm, params)
     }
+    val logger = Logger.getLogger("somservice.CouchAgent")
 
+    PropertyConfigurator.configure("log4j.properties")
 
-    override def createSom:String = {
+    override def createSom:Boolean = {
       //check if the name is unique
       if (createDb) {
         addPositionDoc(dbName)
-        "The map '" + dbName + "' was created successfully"
+        logger.debug("The map '" + dbName + "' was created successfully")
+        true
       }
-      else "The map '" + dbName + "' could not be created in the database"
+      else {
+        logger.info("The map '" + dbName + "' could not be created in the database")
+        false
+      }
     }
 
     override def shutdown:Unit = client.getConnectionManager.shutdown
@@ -88,39 +96,69 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
     override def getDbName = dbName
 
     override def addInitNode(parent:String, wordCount:Map[String,Double]):Option[String] = {
-      val id = getUuid
-      val addr = couchUri + dbName + "/" + id
-      //create json data
-      val jdata1 = new JsObject(List(("maptype","node")))
-      val jdata2 = jdata1.addField(("parent",parent))
-      val jdata3 = jdata2.addField(("weight",wordCount.toList))
-      val jsonData = jdata3.toJson
-      val response = dbPut(addr, jsonData)
-      val rdat = JSON.parse(response)
-      rdat match {
-        case Some(("error",_)::_) => None
-        case Some(_) => Some(id)
-        case _ => None
+      getUuid match {
+        case Some(id) => {
+          val addr = couchUri + dbName + "/" + id
+          //create json data
+          val jdata1 = new JsObject(List(("maptype","node")))
+          val jdata2 = jdata1.addField(("parent",parent))
+          val jdata3 = jdata2.addField(("weight",wordCount.toList))
+          val jsonData = jdata3.toJson
+          val response = dbPut(addr, jsonData)
+          val rdat = JSON.parse(response)
+          rdat match {
+            case Some(List(("error",_),("reason",r:String))) => {
+              logger.error("addInitNode db error: " + r)
+              None
+            }
+            case Some(_) => Some(id)
+            case None => {
+              logger.error("addInitNode fxn got no db response")
+              None
+            }
+          }
+        }
+        case None => {
+          logger.error("addInitNode could not get Uuid")
+          None
+        }
       }
     }
 
-    private def addPositionDoc(parent:String) = {
-      val id = getUuid
-      val addr = couchUri + dbName + "/" + id
-      //create json data
-      val jdata1 = new JsObject(List(("maptype","position")))
-      val jdata2 = jdata1.addField(("grid",Nil))
-      val jdata3 = jdata2.addField(("parent",parent))
-      val jsonData = jdata3.toJson
-      val response = dbPut(addr, jsonData)
-      val rdat = JSON.parse(response)
-      rdat match {
-        case Some(("error",_)::_) => throw new RuntimeException("Could not create a position doc for initial node")
-        case _ => "Position doc created"
+    private def addPositionDoc(parent:String):Boolean = {
+      getUuid match {
+        case Some(id) => {
+          val addr = couchUri + dbName + "/" + id
+          //create json data
+          val jdata1 = new JsObject(List(("maptype","position")))
+          val jdata2 = jdata1.addField(("grid",Nil))
+          val jdata3 = jdata2.addField(("parent",parent))
+          val jsonData = jdata3.toJson
+          val response = dbPut(addr, jsonData)
+          val rdat = JSON.parse(response)
+          rdat match {
+            case Some(List(("error",_),("reason",r:String))) => {
+              logger.error("addInitNode db error: " + r)
+              false
+            } 
+            case Some(_) => {
+              logger.debug("Position doc created")
+              true
+            }
+            case None => {
+              logger.error("addPositionDoc fxn got no db response")
+              false
+            }
+          }
+        }
+        case None => {
+          logger.error("addPositionDoc could not get Uuid")
+          false
+        }
       }
     }  
 
-    override def updateNode(upData:Node):String = {
+    override def updateNode(upData:Node):Boolean = {
       substituteField(upData.id,"weight",upData.weight.toList)
     }
  /*     //get the revision number for the doc
@@ -161,21 +199,37 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
 
 
 
-    override def addEntry(parent:String, deviation:Double, content:String):String = {
-      val id = getUuid
-      val addr = couchUri + dbName + "/" + id
-      //create json data
-      val jdata1 = new JsObject(List(("maptype","entry")))
-      val jdata2 = jdata1.addField(("parent",parent))
-      val jdata3 = jdata2.addField(("deviation",deviation))
-      val jdata4 = jdata3.addField(("content",content))
-      val jsonData = jdata4.toJson
-      val response = dbPut(addr, jsonData)
-      val rdat = JSON.parse(response)
-      rdat match {
-        case Some(List(("error",_),("reason",r:String))) => "Error: " + r
-        case Some(info) => "Added entry - " + info
-        case None => "Hmm... database quiet on addEntry"
+    override def addEntry(parent:String, deviation:Double, content:String): Boolean = {
+      getUuid match {
+        case Some(id) => {
+          val addr = couchUri + dbName + "/" + id
+          //create json data
+          val jdata1 = new JsObject(List(("maptype","entry")))
+          val jdata2 = jdata1.addField(("parent",parent))
+          val jdata3 = jdata2.addField(("deviation",deviation))
+          val jdata4 = jdata3.addField(("content",content))
+          val jsonData = jdata4.toJson
+          val response = dbPut(addr, jsonData)
+          val rdat = JSON.parse(response)
+          rdat match {
+            case Some(List(("error",_),("reason",r:String))) => {
+              logger.error("addEntry db error: " + r)
+              false
+            }
+            case Some(info) => {
+              logger.debug("Added entry - " + info)
+              true
+            }
+            case None => {
+              logger.error("addEntry got no db response")
+              false
+            }
+          }
+        }
+        case None => {
+          logger.error("addEntry could not get Uuid")
+          false
+        }
       }
     }  
 
@@ -187,12 +241,21 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val data = JSON.parse(jsonData)
       data match {
         //check if the parent fxn existed
-        case Some(("error",_)::rest) => None
+        case Some(List(("error",_),("reason",r:String))) => {
+          logger.error("getNodesUsingParent db error: " + r)
+          None
+        }
         //extract data
         case Some(List(("total_rows",rowCount:Double),_,("rows",rows:List[_]))) if rowCount > 0 => {
           Some(pkgNodes(rows))
         }
-        case _ => None
+        case Some(r) => {
+          logger.error("addEntry could not recognize db response: " + r)
+          None
+        }
+        case None => { logger.error("getNodesUsingParent got no db response")
+          None
+        }
       }
     }
 
@@ -201,8 +264,8 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
       data match {
-        case Some(("error",_)::rest) => {
-          println("getPositionDoc had an error: " + rest)
+        case Some(List(("error",_),("reason",r:String))) => {
+          logger.error("getPositionDoc db error: " + r)
           None
         }
         case Some(List(_,_,("rows",List(List(("id",id:String),_,("value",grid)))))) => {
@@ -213,49 +276,70 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
               Some((id,posRows))
             }
             case null => Some((id, Nil))
-            case _ => {println("getPositionDoc did not recognize value: " + grid)
+            case _ => {
+              logger.error("getPositionDoc did not recognize value: " + grid)
               None
             }
           }
         }
-        case Some(rsp) => { println("getPositionDoc did not recognize response: " + rsp)
+        case Some(rsp) => { 
+          logger.error("getPositionDoc did not recognize response: " + rsp)
           None
         }
-        case None => None
+        case None => { logger.error("getPositionDoc got no db response")
+          None
+        }
       }
     }
 
-    override def updatePositionDoc(id:String, posData:List[Any]):Unit = {
-      println(substituteField(id,"grid",posData))
+    override def updatePositionDoc(id:String, posData:List[Any]):Boolean = {
+      if(substituteField(id,"grid",posData)) {
+        logger.debug("Field updated: " + posData.toString)
+        true
+      }
+      else false
     }
 
 
-    private def substituteField(id:String,fieldName:String,subData:List[Any]):String = {
+    private def substituteField(id:String,fieldName:String,subData:List[Any]):Boolean = {
       //Remove from the origDoc the field and value that needs to be changed
       //and add the new data.
       val revRequest = couchUri + dbName + "/" + id
       val jsonData = dbGet(revRequest)
       val data = JSON.parse(jsonData)
-      val updatedDoc = data match {
-        case Some(List(("error",_),("reason",reason))) => throw new RuntimeException("Error: " + reason)
+      data match {
+        case Some(List(("error",_),("reason",reason))) => {
+          logger.error("substituteField get doc error: " + reason)
+          false
+        }
         case Some(origDoc:List[_]) => {
-          for( (d1,d2) <- origDoc) yield {
+          val uDoc = for( (d1,d2) <- origDoc) yield {
             if(d1 == fieldName) (fieldName,subData)
             else (d1,d2)
           }
+          //Send info back to database
+          val jdata1 = new JsObject(uDoc)
+          val jsonSend = jdata1.toJson
+          logger.debug("substituteField info: " + jsonSend)
+          val response = dbPut(revRequest, jsonSend)
+          val rdat = JSON.parse(response)
+          rdat match {
+            case Some(List(("error",_),("reason",reason))) => {
+              logger.error("substituteField update error: " + reason)
+              false
+            }
+            case Some(a) => { true
+            }
+            case None => {
+              logger.error("substituteField got no response from db for update")
+              false
+            }
+          }
         }
-        case None => throw new RuntimeException("substituteField could not get doc")
-      }
-      //Send info back to database
-      val jdata1 = new JsObject(updatedDoc)
-      val jsonSend = jdata1.toJson
-      println("sub info: " + jsonSend)
-      val response = dbPut(revRequest, jsonSend)
-      val rdat = JSON.parse(response)
-      rdat match {
-        case Some(List(("error",_),("reason",reason))) => "Error: " + reason
-        case Some(a) => "Updated doc: " + a
-        case None => "Likely error in update attempt"
+        case None => {
+          logger.error("substituteField got no response from db")
+          false
+        }
       }
     }
 
@@ -266,10 +350,20 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val data = JSON.parse(jsonData)
       data match {
         //check if the parent fxn existed
-        case Some(("error",_)::rest) => None
+        case Some(List(("error",_),("reason",reason))) => {
+          logger.error("getGlobalWordCount error: " + reason)
+          None
+        }
         //extract data
         case Some(List(("rows",List(List(("key",_),("value",num:Double)))))) => Some(num)
-        case _ => None
+        case Some(_) => {
+          logger.error("getGlobalWordCount could not recognize db response format")
+          None
+        }
+        case None => {
+          logger.error("getGlobalWordCount got no response from db")
+          None
+        }
       }
     }
 
@@ -279,10 +373,20 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val data = JSON.parse(jsonData)
       data match {
         //check if the parent fxn existed
-        case Some(("error",_)::rest) => None
+        case Some(List(("error",_),("reason",reason))) => {
+          logger.error("getChildDocNum error: " + reason)
+          None
+        }
         //extract data
         case Some(List(("rows",List(List(("key",_),("value",num:Double)))))) => Some(num)
-        case _ => None
+        case Some(_) => {
+          logger.error("getChildDocNum could not recognize db response format")
+          None
+        }
+        case None => {
+          logger.error("getChildDocNum got no response from db")
+          None
+        }
       }
     }
 
@@ -349,7 +453,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       output
     }
 
-    def getUuid:String = {
+    def getUuid:Option[String] = {
       val httpget = new HttpGet(couchUri + "_uuids")
       val response = client.execute(httpget)
       val rEnt = response.getEntity()
@@ -357,9 +461,9 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       val rJson = JSON.parse(rData)
       httpget.abort
       rJson match {
-        case Some(("uuids",List(id:String))::rest) => id
-        case None => ""
-        case _ => ""
+        case Some(("uuids",List(id:String))::rest) => Some(id)
+        case None => None
+        case _ => None
       }
     }
 

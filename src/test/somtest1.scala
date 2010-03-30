@@ -9,7 +9,7 @@ object SomTestDb {
 
       try {
         val dbagent = new CouchAgent(args(0))
-        println(dbagent.createSom)
+        dbagent.createSom
         //setup data
         val mycontent = "On a rainy day, there is always the chill and gloom that hangs over our heads. But there is also the hopeful expectation that one might see a rainbow. Then all the clouds may pass."
         val inputList = List.fromString(mycontent,' ')

@@ -1,11 +1,14 @@
 package somservice
 import textprocessing.InputTicket
+import org.apache.log4j.Logger
+import org.apache.log4j.PropertyConfigurator
 import scala.actors.Future
 import scala.actors.Futures._
 import scala.Math._
 
 class SomInsertion(data:SomEntry)
 {
+  //Construction***
   val dbAgent:SomDbAgent = data match {
     case BasicContent(dbName,_,_) => new CouchAgent(dbName)
   }
@@ -18,15 +21,17 @@ class SomInsertion(data:SomEntry)
     case BasicContent(_,_,raw) => raw
   }
   val minNodes = 4
+  val logger = Logger.getLogger("somservice.SomInsertion")
+  PropertyConfigurator.configure("log4j.properties")
+  //**************
 
   def insertEntry:Unit = {
     if( ticket.wordMap.size > 0) {
       organizeEntry  match {
         case Some((parentId:String,dist:Double)) => {
-          val insertResult = dbAgent.addEntry(parentId, dist, origContent)
-          println("Inserting entry: " + insertResult)
+          dbAgent.addEntry(parentId, dist, origContent)
         }
-        case None => println("Could not insert entry")
+        case None => logger.info("Could not insert entry")
       }
     }
     else println("Skipping insert of entry with no content")
@@ -38,18 +43,19 @@ class SomInsertion(data:SomEntry)
     //Obtain a node id and the entry's distance from it.
     cycleThruLevels(dbAgent.getDbName, 0.0) match {
       case Some(data) => Some(data)
-      case None => throw new RuntimeException("insertEntry failed because no node  id was returned")
+      case None => None
     }
   }
 
-  private def addStarterNode(parent:String):String = {
-    val nodeId = dbAgent.addInitNode(parent, ticket.wordMap) match {
-      case Some(id:String) => id
-      case None => throw new RuntimeException("addInitNode did not return a node id on insert entry attempt")
+  private def addStarterNode(parent:String):Option[String] = {
+    dbAgent.addInitNode(parent, ticket.wordMap) match {
+      case Some(id:String) => {
+        val pmap = new MapPosition(dbAgent, parent)
+        pmap.addInitNodePosition(id)
+        Some(id)
+      }
+      case None => None
     }
-    val pmap = new MapPosition(dbAgent, parent)
-    pmap.addInitNodePosition(nodeId)
-    nodeId
   }
 
   //compare the entry weight to node weights at each required level
@@ -59,19 +65,24 @@ class SomInsertion(data:SomEntry)
       case None => {
         //this is an empty som
         if (parent == dbAgent.getDbName) {
-          val nodeId = addStarterNode(parent)
-          Some((nodeId,0.0))
+          addStarterNode(parent) match {
+            case Some(nodeId) => Some((nodeId,0.0))
+            case None => None
+          }
         }
-        //Finally, return this node id for entry's parent info
+        //No sub levels, return this node id for entry's parent info
         else Some((parent,lastDistance))
       }
       case Some(levelNodes) => {
         //Does the map layer have minimum number of nodes?
         if( levelNodes.length < minNodes ) {
-          val nodeId = addStarterNode(parent)
-          Some((nodeId, 0.0))
+          addStarterNode(parent) match {
+            case Some(nodeId) => Some((nodeId, 0.0))
+            case None => None
+          }
         }
         else { 
+          //find closest matching node and recursively descend any levels
           val matchedNode = cycleThruNodes( levelNodes)
           matchedNode match {
             case None => None

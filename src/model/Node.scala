@@ -9,8 +9,13 @@ class Node(node_id:String, node_weight:Map[String,Double])
     val upWeight = mutable.Map.empty[String,Double]
     for ((word,count) <- incoming ) {
       if( weight.contains(word) )
-        upWeight += (word -> (weight.apply(word) + count))
+        upWeight += (word -> (weight(word) + count))
       else upWeight += (word -> count)
+    }
+    //Insert original weight words that were not already counted
+    for ((word,count) <- weight) {
+      if( !incoming.contains(word) )
+        upWeight += (word -> count)
     }
     //convert to immutable map
     val w = upWeight.toList

@@ -40,6 +40,10 @@ abstract class SomDbAgent(dbName:String)
   def getPositionDoc(parent:String):Option[Tuple2[String,List[Any]]]
   //Change the position data
   def updatePositionDoc(mapId:String, posData:List[Any]):Boolean
+  //Get the position map that this node belongs to
+  def getNodeMap(nodeId:String):Option[String]
+  //Get all som levels that have not had vertical expansion
+  def getLeafMaps:Option[List[_]]
   //Create a list of nodes with common parent.
   def getNodesUsingParent(parent:String):Option[List[Node]] 
   //Get the number of times a word appears in the entire som
@@ -52,9 +56,12 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
 {
     val couchUri = "http://127.0.0.1:5984/"
     val dbView = "_design/sominsert"
+    val parentWeightView = "parentWeight"
     val wordView = "globalWeight"
     val childView = "allChildren"
     val posView = "mapPosition"
+    val nodePosView = "parentMap"
+    val allMapsView = "allMaps"
     //val client = new DefaultHttpClient()
     val client = {
       val params:HttpParams = new BasicHttpParams
@@ -132,8 +139,13 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
           //create json data
           val jdata1 = new JsObject(List(("maptype","position")))
           val jdata2 = jdata1.addField(("grid",Nil))
-          val jdata3 = jdata2.addField(("parent",parent))
-          val jsonData = jdata3.toJson
+          val jdata3 = jdata2.addField(("parentNode",parent))
+          val pm = getNodeMap(parent) match {
+            case Some(id) => id
+            case None => null
+          }
+          val jdata4 = jdata3.addField(("parentMap",pm))
+          val jsonData = jdata4.toJson
           val response = dbPut(addr, jsonData)
           val rdat = JSON.parse(response)
           rdat match {
@@ -236,7 +248,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
     override def getNodesUsingParent(parent:String):Option[List[Node]] = {
       //call predefined db fxn for specific parent; whenever a new level is 
       //created for a node, a parent fxn should be defined in db
-      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + parent)
+      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + parentWeightView + "?key=%22" + parent + "%22")
       //convert the json data
       val data = JSON.parse(jsonData)
       data match {
@@ -246,11 +258,16 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
           None
         }
         //extract data
-        case Some(List(("total_rows",rowCount:Double),_,("rows",rows:List[_]))) if rowCount > 0 => {
-          Some(pkgNodes(rows))
+        case Some(List(("total_rows",rowCount:Double),_,("rows",rows:List[_]))) => {
+          rows match {
+            case Nil => None
+            case _ => Some(pkgNodes(rows))
+          }
+          //if( rowCount > 0) Some(pkgNodes(rows))
+          //else None
         }
         case Some(r) => {
-          logger.error("addEntry could not recognize db response: " + r)
+          logger.error("getNodesUsingParent could not recognize db response: " + r)
           None
         }
         case None => { logger.error("getNodesUsingParent got no db response")
@@ -300,6 +317,59 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       else false
     }
 
+    override def getNodeMap(nodeId:String):Option[String] = {
+      val req = couchUri + dbName + "/" + dbView + "/_view/" + nodePosView + "?key=%22" + nodeId + "%22"
+      val jsonData = dbGet( req )
+      val data = JSON.parse(jsonData)
+      data match {
+        case Some(List(("error",_),("reason",r:String))) => {
+          logger.error("getNodeMap db error: " + r)
+          None
+        }
+        case Some(List(_,_,("rows",List(List(("id",nodeId:String),_,("value",mapId:String)))))) => Some(mapId)
+        case Some(rsp) => { 
+          logger.error("getNodeMap did not recognize response: " + rsp)
+          None
+        }
+        case None => { logger.error("getNodeMap got no db response")
+          None
+        }
+      }
+    }
+
+    //This fxn assumes that the database ref by dbAgent is only used by 
+    //a single som
+    override def getLeafMaps:Option[List[_]] = {
+      val req = couchUri + dbName + "/" + dbView + "/_view/" + allMapsView
+      val jsonData = dbGet( req )
+      val data = JSON.parse(jsonData)
+      data match {
+        case Some(List(("error",_),("reason",r:String))) => {
+          logger.error("getLeafMaps db error: " + r)
+          None
+        }
+        case Some(List(_,_,("rows",List(mapData:List[_])))) => {
+          //create two lists, one for map ids, and the other for parent ids
+          val mapIdList = for( (mId,pId) <- mapData) yield { mId }
+          val parentList = for( (mId,pId) <- mapData) yield { pId }
+          val diffList = mapIdList -- parentList
+          diffList match {
+            case Nil => {
+              logger.info("getLeafMaps got an empty list")
+              None
+            }
+            case d => Some(d)
+          }
+        }
+        case Some(rsp) => { 
+          logger.error("getLeafMaps did not recognize response: " + rsp)
+          None
+        }
+        case None => { logger.error("getLeafMaps got no db response")
+          None
+        }
+      }
+    }
 
     private def substituteField(id:String,fieldName:String,subData:List[Any]):Boolean = {
       //Remove from the origDoc the field and value that needs to be changed
@@ -356,6 +426,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
         }
         //extract data
         case Some(List(("rows",List(List(("key",_),("value",num:Double)))))) => Some(num)
+        case Some(List(("rows",Nil))) => None
         case Some(_) => {
           logger.error("getGlobalWordCount could not recognize db response format")
           None
@@ -368,7 +439,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
     }
 
     override def getChildDocNum(parent:String):Option[Double] = {
-      val req = couchUri + dbName + "/" + dbView + "/_view/" + childView
+      val req = couchUri + dbName + "/" + dbView + "/_view/" + childView + "?key=%22" + parent + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
       data match {
@@ -379,6 +450,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
         }
         //extract data
         case Some(List(("rows",List(List(("key",_),("value",num:Double)))))) => Some(num)
+        case Some(List(("rows",Nil))) => None
         case Some(_) => {
           logger.error("getChildDocNum could not recognize db response format")
           None
@@ -415,7 +487,8 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       result match {
         case Some(("error",_)::rest) => false
         case Some(("ok",_)::rest) => {
-          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,dbName,wordView,childView,posView))
+          //all view names are defined at the top of this file
+          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,parentWeightView,wordView,childView,posView,nodePosView,allMapsView))
           val jsonData = fxnObj.toJson
           val response = dbPut(couchUri + dbName + "/" + dbView, jsonData)
           true

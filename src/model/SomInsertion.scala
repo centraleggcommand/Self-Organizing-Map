@@ -34,8 +34,7 @@ class SomInsertion(data:SomEntry)
         case None => logger.info("Could not insert entry")
       }
     }
-    else println("Skipping insert of entry with no content")
-    dbAgent.shutdown
+    else logger.info("Skipping insert of entry with no content")
   }
     
   //run the som algorithm on the entry and associate with a node
@@ -65,6 +64,7 @@ class SomInsertion(data:SomEntry)
       case None => {
         //this is an empty som
         if (parent == dbAgent.getDbName) {
+        println("at first addStarterNode")
           addStarterNode(parent) match {
             case Some(nodeId) => Some((nodeId,0.0))
             case None => None
@@ -76,6 +76,7 @@ class SomInsertion(data:SomEntry)
       case Some(levelNodes) => {
         //Does the map layer have minimum number of nodes?
         if( levelNodes.length < minNodes ) {
+        println("at second addStarter ..." + levelNodes.length)
           addStarterNode(parent) match {
             case Some(nodeId) => Some((nodeId, 0.0))
             case None => None

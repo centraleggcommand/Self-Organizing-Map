@@ -39,6 +39,7 @@ class JsObject(fields:List[Tuple2[Any,Any]]) {
         if(sval == "null") toJsNull
         else toJsStr(sval)
       }
+      case null => toJsNull
       case unsupported => unsupported.toString
     }
   }

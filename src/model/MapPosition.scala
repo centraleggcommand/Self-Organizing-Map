@@ -1,6 +1,11 @@
 package somservice
+import org.apache.log4j.Logger
+import org.apache.log4j.PropertyConfigurator
 
 class MapPosition(dbAgent:SomDbAgent, parent:String) {
+
+  val logger = Logger.getLogger("somservice.MapPosition")
+  PropertyConfigurator.configure("log4j.properties")
 
   //The map position is saved with rows in descending order
   //and columns in descending order because it better suits
@@ -61,8 +66,8 @@ class MapPosition(dbAgent:SomDbAgent, parent:String) {
         //Update the database
         dbAgent.updatePositionDoc(mapId,modGrid)
       }
-      case Some(data) => println("addStartPosition - " + data)
-      case None => println("addStartPosition could not retrieve map")
+      case Some(data) => logger.info("addStartPosition - " + data)
+      case None => logger.info("addStartPosition could not retrieve map")
     }
   } 
 

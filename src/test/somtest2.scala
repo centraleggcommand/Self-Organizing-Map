@@ -18,6 +18,6 @@ object SomTest2 {
         }
 
     }
-    else println("Two args not received")
+    else println("Need to have command line arg for db name")
   }
 }

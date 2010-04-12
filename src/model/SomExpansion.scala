@@ -130,7 +130,7 @@ class SomExpansion(dbAgent:SomDbAgent)
 
   private def chkVerticalExp(nodeDeviations:List[Tuple2[Node,Double]],
                              prevExpFxn:(String)=>Boolean ):Unit = {
-    println("not done")
+    println("vert-exp not done")
   }
 
 }

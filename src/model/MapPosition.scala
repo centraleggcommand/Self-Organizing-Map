@@ -183,25 +183,39 @@ class MapPosition(dbAgent:SomDbAgent, parent:String) {
   //Insert a new row betw top and bot rows
   private def insertRow( top:Int, bot:Int, levelNodes:List[Node] ):Unit = {
     //Create array to hold new node ids for the new row in the map
-    val iRow = new Array[_](gridArray(0).length)
+    val iRow = new Array[String](gridArray(0).length)
     //Create nodes in db
     for( col <- 0 to iRow.length-1) {
-      val w1 = levelNodes.find((x)=>{x.id==gridArray(top,col)}).weight
-      val w2 = levelNodes.find((x)=>{x.id==gridArray(bot,col)}).weight
-      val nId = dbAgent.addInitNode(parent, meldWeights( w1, w2))
-      iRow(col) = nId
+      val n1 = levelNodes.find((x)=>{x.id==gridArray(top)(col)})
+      val n2 = levelNodes.find((x)=>{x.id==gridArray(bot)(col)})
+      val nId = n1 match {
+        case None => {
+          n2 match {
+            case None => dbAgent.addInitNode(parent, null)
+            case Some(node2) => dbAgent.addInitNode(parent, node2.weight)
+          }
+        }
+        case Some(node1) => {
+          n2 match {
+            case None => dbAgent.addInitNode(parent, node1.weight)
+            case Some(node2) => dbAgent.addInitNode(parent, meldWeights(node1.weight, node2.weight))
+          }
+        }
+      }
+      nId match {
+        case None => logger.info("insertRow could not add the node to db")
+        case Some(id) => iRow(col) = id
+      }
     }
     logger.debug("Inserting new row: " + iRow)
     //update the position map
     //using a list to conform with JsObject conversion fxn
-    var gridList = Nil
-    for( gRow <- 0 to gridArray.length-1) {
-      if( gRow == bot) {
-        //add the new row and following row
-        gridList = gridArray(gRow).toList::iRow.toList::gridList
-      }
-      else gridList = gridArray(gRow).toList::gridList
-    }
+    //change to array of lists
+    val arrList = gridArray.map(_ .toList)
+    //insert new row
+    val gridA = arrList.slice(0,bot).toList
+    val gridB = arrList.drop(bot).toList
+    val gridList = gridA:::iRow.toList::gridB
     positionDoc match {
       case None => {
         logger.info("getNeighbors could not obtain pos map")
@@ -216,9 +230,22 @@ class MapPosition(dbAgent:SomDbAgent, parent:String) {
     //Each row in the position map needs to have a new element added
     val arrayOfLists = for( row <- gridArray ) yield {
       //Create a new node
-      val w1 = levelNodes.find((x)=>{x.id==row(rt)}).weight
-      val w2 = levelNodes.find((x)=>{x.id==row(lf)}).weight
-      val nId = dbAgent.addInitNode(parent, meldWeights( w1, w2))
+      val n1 = levelNodes.find((x)=>{x.id==row(rt)})
+      val n2 = levelNodes.find((x)=>{x.id==row(lf)})
+      val nId = n1 match {
+        case None => {
+          n2 match {
+            case None => dbAgent.addInitNode(parent, null)
+            case Some(node2) => dbAgent.addInitNode(parent, node2.weight)
+          }
+        }
+        case Some(node1) => {
+          n2 match {
+            case None => dbAgent.addInitNode(parent, node1.weight)
+            case Some(node2) => dbAgent.addInitNode(parent, meldWeights(node1.weight, node2.weight))
+          }
+        }
+      }
       //Create updated position map row
       (row.slice(0,lf).toList)::nId::(row.slice(lf,row.length-1)).toList
     }

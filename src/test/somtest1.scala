@@ -1,7 +1,7 @@
 import textprocessing._
 import somservice._
 
-object SomTestDb {
+object SomTest1 {
 
   def main(args: Array[String]) {
     //create a database
@@ -11,26 +11,37 @@ object SomTestDb {
       try {
         dbagent.createSom
         //setup data
-        /*
-        val mycontent = "On a rainy day, there is always the chill and gloom that hangs over our heads. But there is also the hopeful expectation that one might see a rainbow. Then all the clouds may pass."
-        val inputList = List.fromString(mycontent,' ')
+        val mycontent = args.toList.tail
+        println("inserting: " + mycontent)
+        def convToStrList(rem:List[_],res:List[String]):List[String] = {
+          rem match {
+            case Nil => res.reverse
+            case myrem => {
+              val item = myrem.head match { 
+                case i:String => i
+                case unknown => unknown.toString
+              }
+              convToStrList(myrem.tail, item::res)
+            }
+          }
+        }
+
+        val inputList = convToStrList(mycontent,Nil)
+        //val inputList = List.fromString(mycontent,' ')
         val filteredList = StopWords.removeStopwords(inputList)
         var stemmer = new Stemmer()
         val stemmedList = filteredList.map(stemmer.stemWord(_))
         //perform insertion
-        val myentry = new BasicContent(args(0),stemmedList,mycontent)
+        val myentry = new BasicContent(args(0),stemmedList,inputList.mkString)
         val insert = new SomInsertion(myentry)
         insert.insertEntry
+        //dbagent.getNodeMap("0d2e39dfa11374c2c98a7f001df5ab35")
         dbagent.shutdown
-        */
-        println("testing getLeafMaps")
-        println(dbagent.getLeafMaps)
       } catch {
           case e:RuntimeException => println(e.toString) 
           dbagent.shutdown
         }
 
     }
-    else println("Two args not received")
   }
 }

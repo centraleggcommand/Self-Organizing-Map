@@ -39,13 +39,20 @@ object JsFxn {
   }
 
   def getAllMaps(fxnName:String):Tuple2[String,Any] = {
-    val fxnbody = """function(doc) { if( doc.maptype == \"position\"){ emit( doc._id, doc.parentMap);}}"""
+    val fxnbody = """function(doc) { if( doc.maptype == \"position\"){ emit( doc.parentMap, doc.parentNode);}}"""
     //return a representation consistent with jsonparse lib
     (fxnName,List(("map",fxnbody)))
   }
 
-  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String, cFxn:String, posFxn:String, nodePosFxn:String, allMapsFxn:String):List[Tuple2[Any,Any]] = {
-    List(("_id",viewName),("views",List(getNodeParentFxn(pFxn), getGlobalWordFxn(parent,wFxn),getChildrenFxn(cFxn),getPositionFxn(posFxn),getNodePosFxn(nodePosFxn),getAllMaps(allMapsFxn))))
+  def getAllEntries(fxnName:String):Tuple2[String,Any] = {
+    val mapBody = """function(doc) { if( doc.maptype == \"entry\"){ emit( doc.parent, doc.deviation);}}"""
+    //return a representation consistent with jsonparse lib
+    val reduceBody = "function(keys,values) { var tot = sum(values); return (tot / values.length) }"
+    (fxnName,List(("map",mapBody),("reduce",reduceBody)))
+  }
+
+  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String, cFxn:String, posFxn:String, nodePosFxn:String, allMapsFxn:String, allEntriesFxn:String):List[Tuple2[Any,Any]] = {
+    List(("_id",viewName),("views",List(getNodeParentFxn(pFxn), getGlobalWordFxn(parent,wFxn),getChildrenFxn(cFxn),getPositionFxn(posFxn),getNodePosFxn(nodePosFxn),getAllMaps(allMapsFxn),getAllEntries(allEntriesFxn))))
   }
 
 }

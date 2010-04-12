@@ -64,7 +64,7 @@ class SomInsertion(data:SomEntry)
       case None => {
         //this is an empty som
         if (parent == dbAgent.getDbName) {
-        println("at first addStarterNode")
+        logger.debug("at first addStarterNode")
           addStarterNode(parent) match {
             case Some(nodeId) => Some((nodeId,0.0))
             case None => None
@@ -76,7 +76,7 @@ class SomInsertion(data:SomEntry)
       case Some(levelNodes) => {
         //Does the map layer have minimum number of nodes?
         if( levelNodes.length < minNodes ) {
-        println("at second addStarter ..." + levelNodes.length)
+        logger.debug("at second addStarter ..." + levelNodes.length)
           addStarterNode(parent) match {
             case Some(nodeId) => Some((nodeId, 0.0))
             case None => None
@@ -100,20 +100,20 @@ class SomInsertion(data:SomEntry)
       
   private def cycleThruNodes(nodes:List[Node]):Option[Tuple2[Node,Double]] = {
     //create a list of rankings
-    val rankList = for( node <- nodes ) yield {
-      future[Option[Tuple2[Node,Double]]] {
-        val distance = calcNodeDistance( node)
-        distance match {
-          case Some(d) => Some((node,d))
-          case None => None
+    if( nodes.isEmpty) None
+    else {
+      val rankList = for( node <- nodes ) yield {
+        future[Tuple2[Node,Double]] {
+          (node, node.calcNodeDistance( ticket.wordMap, dbAgent))
         }
       }
+      val starter = rankList.head
+      //return the tuple with smallest distance from node
+      Some(rankList.foldLeft(starter())(compareDistance _))
     }
-    val starter = rankList.head
-    //return the tuple with smallest distance from node
-    rankList.foldLeft(starter())(compareDistance _)
   }
 
+/*
   //This returns the distance between the ticket and node.
   //If the ticket is empty, then a 'None' value is returned.
   private def calcNodeDistance( node:Node ):Option[Double] = {
@@ -156,9 +156,11 @@ class SomInsertion(data:SomEntry)
     //empty ticket?
     else None
   }
+  */
 
-  private def compareDistance(t1:Option[Tuple2[Node,Double]],f2:Future[Option[Tuple2[Node,Double]]]):Option[Tuple2[Node,Double]] = {
+  private def compareDistance(t1:Tuple2[Node,Double],f2:Future[Tuple2[Node,Double]]):Tuple2[Node,Double] = {
     val t2 = f2()
+    /*
     t1 match {
       case None => t2
       case Some((node,dist)) => {
@@ -171,6 +173,9 @@ class SomInsertion(data:SomEntry)
         }
       }
     }
+    */
+    if( t1._2 < t2._2) t1
+    else t2
   }
 
 }

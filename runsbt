@@ -1,0 +1,6 @@
+#!/bin/bash
+
+
+#./third_party/sbt "clean" "reload" "update" "test"
+./third_party/sbt 
+

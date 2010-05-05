@@ -17,4 +17,5 @@ class SomProject( info: ProjectInfo) extends DefaultWebProject(info)
   val smackRepo = "m2-repository-smack" at "http://maven.reucon.com/public"
 
   override def compileOptions = super.compileOptions ++ Seq(Unchecked)
+  override def artifactID = "som"
 }

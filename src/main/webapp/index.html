@@ -1,0 +1,28 @@
+
+<lift:surround with="default" at="content">
+  <h1>Document Organizer</h1>Version 0.1 test
+  <br/>
+  <br/>Please enter any text in the area below.It will be placed in a group location on the map based on similar words. Documents that are similar will be closer together on the map.
+  <br/>
+  <p>
+    <lift:DbForm.dbCreate form="POST">
+      Create a new database: <create:dbname/><create:submit/>
+    </lift:DbForm.dbCreate>
+    <div id="errorDisplay">
+    </div>
+  </p>
+  <p>
+    <lift:EntryForm.basic form="POST">
+      Choose a database: <entry:db />
+      <br/><br/>
+      Subject: <entry:subject />
+      <br/>
+      <entry:content />
+      <br/>
+      <entry:submit />
+    </lift:EntryForm.basic>
+  </p>
+  <p>
+    <lift:MapDisplay.init />
+  </p>
+</lift:surround>

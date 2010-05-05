@@ -83,9 +83,11 @@ class SomExpansion(dbName:String)
                   }
                   val sortedNodeAvgs = allNodeAvgs.sort((x,y) => x._2 < y._2)
                   logger.debug("Node deviations: " + sortedNodeAvgs)
+                  //do I grow wider?
                   chkHorizontalExp(sortedNodeAvgs, nId)
                   //fxn to check if a node has already vertically expanded
                   val prevExp = (nodeId:String) => leafParentNodes.exists((x)=>x==nodeId)
+                  //do I grow other levels?
                   chkVerticalExp(sortedNodeAvgs, prevExp)
                 }
               }

@@ -56,8 +56,14 @@ object JsFxn {
     (fxnName,List(("map",fxnBody)))
   }
 
-  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String, cFxn:String, posFxn:String, nodePosFxn:String, allMapsFxn:String, entryDevFxn:String, entrySCFxn:String):List[Tuple2[Any,Any]] = {
-    List(("_id",viewName),("views",List(getNodeParentFxn(pFxn), getGlobalWordFxn(parent,wFxn),getChildrenFxn(cFxn),getPositionFxn(posFxn),getNodePosFxn(nodePosFxn),getAllMaps(allMapsFxn),getEntryDev(entryDevFxn),getEntrySC(entrySCFxn))))
+  def getTally(fxnName:String):Tuple2[String,Any] = {
+    val fxnBody = """function(doc) { if(doc.maptype ==\"tally\") emit(doc._id, doc.entryTally) }"""
+    (fxnName,List(("map",fxnBody)))
+  }
+
+
+  def getInitView(viewName:String, parent:String, pFxn:String, wFxn:String, cFxn:String, posFxn:String, nodePosFxn:String, allMapsFxn:String, entryDevFxn:String, entrySCFxn:String, tallyFxn:String):List[Tuple2[Any,Any]] = {
+    List(("_id",viewName),("views",List(getNodeParentFxn(pFxn), getGlobalWordFxn(parent,wFxn),getChildrenFxn(cFxn),getPositionFxn(posFxn),getNodePosFxn(nodePosFxn),getAllMaps(allMapsFxn),getEntryDev(entryDevFxn),getEntrySC(entrySCFxn),getTally(tallyFxn))))
   }
 
 }

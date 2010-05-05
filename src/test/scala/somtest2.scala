@@ -9,7 +9,7 @@ object SomTest2 {
 
       val dbagent = new CouchAgent(args(0))
       try {
-        val expand = new SomExpansion(dbagent)
+        val expand = new SomExpansion(args(0))
         expand.checkExpansion
       } catch {
           case e:RuntimeException => println(e.toString) 

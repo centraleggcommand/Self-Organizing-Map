@@ -38,6 +38,9 @@ abstract class SomDbAgent(dbName:String)
   def updateNode(n:Node):Boolean
   //Add content into the database and return status msg.
   def addEntry(parent:String, deviation:Double, subject:String, content:String):Boolean
+  //Update count of number of entries. Used to determine when a 
+  //map expansion should occur
+  def updateTally(reset:Boolean):Boolean
   //Get a representation of the location of every node on a som layer
   def getPositionDoc(parent:String):Option[Tuple2[String,List[Any]]]
   //Change the position data
@@ -73,6 +76,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
     val entryDevView = "entryDev"
     //get the subject and content of all entries
     val entrySCView = "entrySC"
+    val tallyView = "tally"
     //val client = new DefaultHttpClient()
     val client = {
       val params:HttpParams = new BasicHttpParams
@@ -100,6 +104,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       //check if the name is unique
       if (createDb) {
         addPositionDoc(dbName)
+        addTallyDoc
         logger.debug("The map '" + dbName + "' was created successfully")
         true
       }
@@ -199,6 +204,39 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       }
     }  
 
+    private def addTallyDoc:Boolean = {
+      logger.debug("Trying to add a tally doc")
+      getUuid match {
+        case Some(id) => {
+          val addr = couchUri + dbName + "/" + id
+          //create json data
+          val jdata1 = new JsObject(List(("maptype","tally")))
+          val jdata2 = jdata1.addField(("entryTally",0.0))
+          val jsonData = jdata2.toJson
+          val response = dbPut(addr, jsonData)
+          val rdat = JSON.parse(response)
+          rdat match {
+            case Some(List(("error",_),("reason",r:String))) => {
+              logger.error("addTallyDoc db error: " + r)
+              false
+            } 
+            case Some(_) => {
+              logger.debug("Tally doc created")
+              true
+            }
+            case None => {
+              logger.error("addTallyDoc fxn got no db response")
+              false
+            }
+          }
+        }
+        case None => {
+          logger.error("addTallyDoc could not get Uuid")
+          false
+        }
+      }
+    }  
+
     override def updateNode(upData:Node):Boolean = {
       substituteField(upData.id,"weight",upData.weight.toList)
     }
@@ -274,6 +312,36 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
         }
       }
     }  
+
+    override def updateTally(reset:Boolean):Boolean = {
+      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + tallyView)
+      //convert the json data
+      val data = JSON.parse(jsonData)
+      data match {
+        //check if the db fxn existed
+        case Some(List(("error",_),("reason",r:String))) => {
+          logger.error("updateTally db error: " + r)
+          false
+        }
+        //extract data
+        case Some(List(_,_,("rows",List(List(("id",id:String),_,("value",num:Double)))))) => {
+          val n = if(!reset) num+1
+                  else 0.0
+          substituteField(id,"entryTally",n)
+          logger.debug("Updating tally: " + n)
+          true
+        }
+        case Some(List(_,_,("rows",Nil))) => {
+          logger.debug("No entry tally found")
+          false
+        }
+        case resp => {
+          logger.debug("Unrecognized db response: " + resp)
+          false
+        }
+      }
+    }
+
 
     override def getAvgNodeDeviation(parent:String):Option[Double] = {
       val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + entryDevView + "?key=%22" + parent + "%22")
@@ -460,7 +528,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       }
     }
 
-    private def substituteField(id:String,fieldName:String,subData:List[Any]):Boolean = {
+    private def substituteField(id:String,fieldName:String,subData:Any):Boolean = {
       //Remove from the origDoc the field and value that needs to be changed
       //and add the new data.
       val revRequest = couchUri + dbName + "/" + id
@@ -613,7 +681,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
         case Some(("ok",_)::rest) => {
           //all view names are defined at the top of this file
           logger.debug("Creating views")
-          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,parentWeightView,wordView,childView,posView,nodePosView,allMapsView,entryDevView,entrySCView))
+          val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,parentWeightView,wordView,childView,posView,nodePosView,allMapsView,entryDevView,entrySCView,tallyView))
           val jsonData = fxnObj.toJson
           logger.debug("Inserting json for db views: " + jsonData)
           val response = dbPut(couchUri + dbName + "/" + dbView, jsonData)

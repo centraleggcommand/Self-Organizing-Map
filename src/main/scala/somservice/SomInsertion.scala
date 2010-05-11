@@ -34,6 +34,8 @@ class SomInsertion(data:SomEntry)
       organizeEntry  match {
         case Some((parentId:String,dist:Double)) => {
           dbAgent.addEntry(parentId, dist, subject, origContent)
+          val expansion = new SomExpansion(dbAgent)
+          expansion.checkExpansion(parentId)
         }
         case None => logger.info("Could not insert entry")
       }

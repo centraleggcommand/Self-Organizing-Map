@@ -49,9 +49,6 @@ class EntryForm  {
         insertRequest.insertEntry
         insertRequest.cleanup
         logger.debug("Inserting the entry: " + entry)
-        val expansionCheck = new SomExpansion(dbName)
-        expansionCheck.checkExpansion
-        expansionCheck.cleanup
       }
       else ("Not inserting zero length entry")
     }

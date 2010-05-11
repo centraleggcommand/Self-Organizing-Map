@@ -41,8 +41,11 @@ abstract class SomDbAgent(dbName:String)
   //Update count of number of entries. Used to determine when a 
   //map expansion should occur
   def updateTally(reset:Boolean):Boolean
+  def getTally:Option[Double]
   //Get a representation of the location of every node on a som layer
   def getPositionDoc(parent:String):Option[Tuple2[String,List[Any]]]
+  //Create a new position map
+  def addPositionDoc(parent:String):Boolean
   //Change the position data
   def updatePositionDoc(mapId:String, posData:List[Any]):Boolean
   //Get the position map that this node belongs to
@@ -63,8 +66,10 @@ abstract class SomDbAgent(dbName:String)
   def getEntries(parent:String):Option[List[Tuple2[Any,Any]]]
 }
 
-class CouchAgent(dbName:String) extends SomDbAgent(dbName)
+class CouchAgent(dbn:String) extends SomDbAgent(dbn)
 {
+    val dbName = if(dbn.length > 0) dbn
+                 else "dummy"
     val couchUri = "http://127.0.0.1:34719/"
     val dbView = "_design/sominsert"
     val parentWeightView = "parentWeight"
@@ -165,7 +170,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       }
     }
 
-    private def addPositionDoc(parent:String):Boolean = {
+    override def addPositionDoc(parent:String):Boolean = {
       logger.debug("Trying to add a position doc")
       getUuid match {
         case Some(id) => {
@@ -298,6 +303,7 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
             }
             case Some(info) => {
               logger.debug("Added entry - " + info)
+              updateTally(true)
               true
             }
             case None => {
@@ -342,6 +348,30 @@ class CouchAgent(dbName:String) extends SomDbAgent(dbName)
       }
     }
 
+    override def getTally:Option[Double] = {
+      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + tallyView)
+      //convert the json data
+      val data = JSON.parse(jsonData)
+      data match {
+        //check if the db fxn existed
+        case Some(List(("error",_),("reason",r:String))) => {
+          logger.error("getTally db error: " + r)
+          None
+        }
+        //extract data
+        case Some(List(_,_,("rows",List(List(("id",id:String),_,("value",num:Double)))))) => {
+          Some(num)
+        }
+        case Some(List(_,_,("rows",Nil))) => {
+          logger.debug("No entry tally found")
+          None
+        }
+        case resp => {
+          logger.debug("Unrecognized db response: " + resp)
+          None
+        }
+      }
+    }
 
     override def getAvgNodeDeviation(parent:String):Option[Double] = {
       val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + entryDevView + "?key=%22" + parent + "%22")

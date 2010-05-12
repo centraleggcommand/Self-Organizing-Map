@@ -189,7 +189,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           val rdat = JSON.parse(response)
           rdat match {
             case Some(List(("error",_),("reason",r:String))) => {
-              logger.error("addInitNode db error: " + r)
+              logger.error("addPositionDoc db error: " + r)
               false
             } 
             case Some(_) => {
@@ -292,8 +292,10 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           val jdata2 = jdata1.addField(("parent",parent))
           val jdata3 = jdata2.addField(("deviation",deviation))
           val jdata4 = jdata3.addField(("subject", subject))
-          val jdata5 = jdata4.addField(("content",content))
+          val jsstr = content.replaceAll("\"","'")
+          val jdata5 = jdata4.addField(("content",jsstr))
           val jsonData = jdata5.toJson
+          logger.debug("adding entry: " + jsonData)
           val response = dbPut(addr, jsonData)
           val rdat = JSON.parse(response)
           rdat match {

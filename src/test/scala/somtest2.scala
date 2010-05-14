@@ -9,8 +9,16 @@ object SomTest2 {
 
       val dbagent = new CouchAgent(args(0))
       try {
-        val expand = new SomExpansion(args(0))
-        expand.checkExpansion
+        val expand = new SomExpansion(dbagent)
+        dbagent.getNodesUsingParent(args(0)) match {
+          case None =>
+          case Some(levelnodes) => {
+            for(node <- levelnodes) {
+              println("checking expansion")
+              expand.checkExpansion(node.id)
+	    }
+	  }
+	}
       } catch {
           case e:RuntimeException => println(e.toString) 
           dbagent.shutdown

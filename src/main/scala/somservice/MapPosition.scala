@@ -271,7 +271,7 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
       }
       case Some((mId:String, _)) => {
         dbAgent.updatePositionDoc( mId, arrayOfLists.toList)
-        logger.debug("Updating pos map with new column")
+        logger.debug("Updating pos map with new column: " + arrayOfLists)
       }
     }
   } catch {

@@ -1,8 +1,7 @@
 package somdisplay.snippet
 
 import somservice._
-import textprocessing.{Stemmer,StopWords}
-import scala.collection.mutable.ListBuffer
+import textprocessing._
 import scala.xml._
 import _root_.net.liftweb.common.{Full,Empty,Box,Failure}
 import _root_.net.liftweb.http._
@@ -35,13 +34,7 @@ class EntryForm  {
     def handleSubmit = {
       if( entry.length > 0) {
         //break entry data into list of filtered, stemmed words
-        val input = new ListBuffer[String]
-        val noPunc = """\s*\W*([\w\d\'_-]*)\W*\s*""".r
-        for( noPunc(word) <- noPunc findAllIn entry) input += word
-        val inputList = input.toList.map( _.toLowerCase )
-        val filteredList = StopWords.removeStopwords(inputList)
-        val stemmer = new Stemmer()
-        val stemmedList = filteredList.map(stemmer.stemWord(_))
+        val stemmedList = DocProcessor.docToList(entry)
         val entryInfo = new BasicContent( dbName, stemmedList, subject, entry)
         val insertRequest = new SomInsertion( entryInfo)
         logger.debug("Inserting into db: " + dbName)

@@ -31,24 +31,28 @@ class SomInsertion(data:SomEntry)
 
   def insertEntry:Unit = {
     if( ticket.wordMap.size > 0) {
-      organizeEntry  match {
-        case Some((parentId:String,dist:Double)) => {
-          dbAgent.addEntry(parentId, dist, subject, origContent)
-          val expansion = new SomExpansion(dbAgent)
-          expansion.checkExpansion(parentId)
-        }
-        case None => logger.info("Could not insert entry")
-      }
+      organizeEntry(dbAgent.getDbName)
     }
     else logger.info("Skipping insert of entry with no content")
   }
-    
+
+  def insertAtLevel(startNode:String):Unit = {
+    if( ticket.wordMap.size > 0) {
+      organizeEntry(startNode)
+    }
+    else logger.info("Skipping insert of entry with no content")
+  }
+
   //run the som algorithm on the entry and associate with a node
-  private def organizeEntry:Option[Tuple2[String,Double]] = {
+  private def organizeEntry(startNode:String):Unit = {
     //Obtain a node id and the entry's distance from it.
-    cycleThruLevels(dbAgent.getDbName, 0.0) match {
-      case Some(data) => Some(data)
-      case None => None
+    cycleThruLevels( startNode, startNode, 0.0) match {
+      case Some((nodeId:String,dist:Double)) => {
+          dbAgent.addEntry(nodeId, dist, subject, origContent)
+          val expansion = new SomExpansion(dbAgent)
+          expansion.checkExpansion(nodeId)
+      }
+      case None => logger.info("Could not insert entry")
     }
   }
 
@@ -64,13 +68,13 @@ class SomInsertion(data:SomEntry)
   }
 
   //compare the entry weight to node weights at each required level
-  private def cycleThruLevels(parent:String, lastDistance:Double):Option[Tuple2[String,Double]] = {
+  private def cycleThruLevels(startNode:String, parent:String, lastDistance:Double):Option[Tuple2[String,Double]] = {
     //level zero map nodes have the db name as the parent value
     dbAgent.getNodesUsingParent(parent) match {
       case None => {
         //this is an empty som
-        if (parent == dbAgent.getDbName) {
-        logger.debug("at first addStarterNode")
+        if (parent == startNode) {
+        logger.debug("Adding first node to level")
           addStarterNode(parent) match {
             case Some(nodeId) => Some((nodeId,0.0))
             case None => None
@@ -82,7 +86,7 @@ class SomInsertion(data:SomEntry)
       case Some(levelNodes) => {
         //Does the map layer have minimum number of nodes?
         if( levelNodes.length < minNodes ) {
-        logger.debug("at second addStarter ..." + levelNodes.length)
+        logger.debug("Adding additional nodes to current " + levelNodes.length)
           addStarterNode(parent) match {
             case Some(nodeId) => Some((nodeId, 0.0))
             case None => None
@@ -96,7 +100,7 @@ class SomInsertion(data:SomEntry)
             case Some((node,dist)) => {
               val upNode = node.updateWeight( ticket.wordMap)
               dbAgent.updateNode( upNode)
-              cycleThruLevels( node.id, dist)
+              cycleThruLevels( startNode, node.id, dist)
             }
           } 
         }

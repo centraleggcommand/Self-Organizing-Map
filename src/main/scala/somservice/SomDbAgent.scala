@@ -51,9 +51,7 @@ abstract class SomDbAgent(dbName:String)
   //Get the position map that this node belongs to
   def getNodeMap(nodeId:String):Option[String]
   //Get the map id, parent node id, and parent map id
-  def getPositionMapTree:Option[List[_]]
-  //Get all som levels that have not had vertical expansion
-  def getLeafMapParents:Option[List[_]]
+  def getPositionMapTree:Option[ListType]
   //Get the deviation value for each entry belonging to a node
   def getAvgNodeDeviation(parent:String):Option[Double]
   //Create a list of nodes with common parent.
@@ -63,7 +61,9 @@ abstract class SomDbAgent(dbName:String)
   //Get the number of documents mapped to a node
   def getChildDocNum(parent:String):Option[Double]
   //Get entry subject and content for all entries under a node
-  def getEntries(parent:String):Option[List[Tuple2[Any,Any]]]
+  def getEntries(parent:String):Option[List[Tuple3[Any,Any,Any]]]
+  //Get the parent node id for a node
+  def getParentNode(nodeId:String):Option[String]
 }
 
 class CouchAgent(dbn:String) extends SomDbAgent(dbn)
@@ -305,7 +305,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
             }
             case Some(info) => {
               logger.debug("Added entry - " + info)
-              updateTally(true)
+              updateTally(false)
               true
             }
             case None => {
@@ -496,7 +496,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
 
     //This fxn assumes that the database ref by dbAgent is only used by 
     //a single som
-    override def getPositionMapTree:Option[List[_]] = {
+    override def getPositionMapTree:Option[ListType] = {
       val req = couchUri + dbName + "/" + dbView + "/_view/" + allMapsView
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
@@ -508,53 +508,12 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
         }
         //Expect: Some(List((total_rows,_),(offset,_),(rows,List( List((id,_),(key,_),(value,_))...) )))
         case Some(List(_,_,("rows", mapData:List[_]))) => {
-          Some(mapData)
+          val res = for( List( ("id",id:String),("key",key:String),("value",v:String) ) <- mapData)
+            yield { (id,key,v) }
+          Some(PositionTree(res))
         }
         case None => {
           logger.info("getPositionMapTree got not db data")
-          None
-        }
-      }
-    }
-
-    //This fxn assumes that the database ref by dbAgent is only used by 
-    //a single som
-    override def getLeafMapParents:Option[List[_]] = {
-      val req = couchUri + dbName + "/" + dbView + "/_view/" + allMapsView
-      val jsonData = dbGet( req )
-      val data = JSON.parse(jsonData)
-      logger.debug("db get allmaps: " + data)
-      data match {
-        case Some(List(("error",_),("reason",r:String))) => {
-          logger.error("getLeafMaps db error: " + r)
-          None
-        }
-        //Expect: Some(List((total_rows,_),(offset,_),(rows,List( List((id,_),(key,_),(value,_))...) )))
-        case Some(List(_,_,("rows", mapData:List[_]))) => {
-          //create two lists, one for map ids, and the other for parent ids
-          val mapIdList = for( List(("id",mId),_,_) <- mapData) yield { mId }
-          val parentList = for( List(_,("key",pMapId),_) <- mapData) yield { pMapId }
-          logger.debug("Position map ids: " + mapIdList)
-          logger.debug("Position map parent ids: " + parentList)
-          val diffList = mapIdList -- parentList
-          logger.debug("Diff all maps and parents: " + diffList)
-          diffList match {
-            case Nil => {
-              logger.info("getLeafMaps got an empty list")
-              None
-            }
-            //use the leaf map ids to obtain parent ids again
-            case d => {
-              val leafParentIds = for{ List(("id",mId),_,("value",pNodeId)) <- mapData if d.exists((x)=> x == mId) } yield pNodeId
-              Some(leafParentIds)
-            }
-          } 
-        }
-        case Some(rsp) => { 
-          logger.error("getLeafMaps did not recognize response: " + rsp)
-          None
-        }
-        case None => { logger.error("getLeafMaps got no db response")
           None
         }
       }
@@ -652,7 +611,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     }
 
     //This returns the subject and content of entries with the given parent.
-    override def getEntries(parent:String):Option[List[Tuple2[Any,Any]]] = {
+    override def getEntries(parent:String):Option[List[Tuple3[Any,Any,Any]]] = {
       val req = couchUri + dbName + "/" + dbView + "/_view/" + entrySCView + "?key=%22" + parent + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
@@ -665,7 +624,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
         //extract data
         case Some(List(_,_,("rows", data:List[_]))) => { 
           val scData = for( List(("id",id),("key",_),("value",List(subject,content))) <- data) yield {
-            (subject,content)
+            (id,subject,content)
           }
           if(scData.length > 0) Some(scData)
           else None
@@ -681,7 +640,27 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       }
     }
 
-
+    //Return the parent node id for a node
+    override def getParentNode(nodeId:String):Option[String] = {
+      val jsonData = dbGet(couchUri + dbName + "/" + nodeId)
+      //convert the json data
+      val data = JSON.parse(jsonData)
+      logger.debug("node parent: " + data)
+      data match {
+        //check if the db fxn existed
+        case Some(List(("error",_),("reason",r:String))) => {
+          logger.error("getParentNode db error: " + r)
+          None
+        }
+        //extract data
+        case Some(List(_,_,_,("parent",parent:String),_)) => {
+          Some(parent)
+        }
+        case Some(List(("rows",Nil))) => None
+        case _ => None
+      }
+    }
+      
 
     private def pkgNodes(rows:List[Any]):List[Node] = {
       for (row <- rows) yield {

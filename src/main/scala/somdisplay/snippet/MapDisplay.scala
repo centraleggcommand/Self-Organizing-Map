@@ -116,7 +116,7 @@ class MapDisplay {
 
   private def showEntries(entryData:List[Any]) = {
     val elements = new ListBuffer[NodeSeq]
-    for( (subject,content) <- entryData) {
+    for( (id,subject,content) <- entryData) {
       elements += <tr><td>Subject: {subject.toString}</td></tr><tr><td>{content.toString}</td></tr>
     }
     //Provide a link to previous map display if this is not the first

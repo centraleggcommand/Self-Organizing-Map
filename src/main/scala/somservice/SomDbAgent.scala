@@ -40,8 +40,8 @@ abstract class SomDbAgent(dbName:String)
   def addEntry(parent:String, deviation:Double, subject:String, content:String):Boolean
   //Update count of number of entries. Used to determine when a 
   //map expansion should occur
-  def updateTally(reset:Boolean):Boolean
-  def getTally:Option[Double]
+  def updateTally(parentNode:String, reset:Boolean):Boolean
+  def getTally(parentNode:String):Option[Double]
   //Get a representation of the location of every node on a som layer
   def getPositionDoc(parent:String):Option[Tuple2[String,List[Any]]]
   //Create a new position map
@@ -216,7 +216,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           val addr = couchUri + dbName + "/" + id
           //create json data
           val jdata1 = new JsObject(List(("maptype","tally")))
-          val jdata2 = jdata1.addField(("entryTally",0.0))
+          val jdata2 = jdata1.addField(("entryTally",Nil))
           val jsonData = jdata2.toJson
           val response = dbPut(addr, jsonData)
           val rdat = JSON.parse(response)
@@ -305,7 +305,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
             }
             case Some(info) => {
               logger.debug("Added entry - " + info)
-              updateTally(false)
               true
             }
             case None => {
@@ -321,7 +320,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       }
     }  
 
-    override def updateTally(reset:Boolean):Boolean = {
+    override def updateTally( parentNode:String, reset:Boolean):Boolean = {
       val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + tallyView)
       //convert the json data
       val data = JSON.parse(jsonData)
@@ -332,13 +331,26 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           false
         }
         //extract data
-        case Some(List(_,_,("rows",List(List(("id",id:String),_,("value",num:Double)))))) => {
-          val n = if(!reset) num+1
-                  else 0.0
-          substituteField(id,"entryTally",n)
-          logger.debug("Updating tally: " + n)
-          true
-        }
+        case Some(List(_,_,("rows",List(List(("id",id:String),_,("value",tally)))))) => {
+          tally match {
+            case tally:List[_] => {
+              tally.find( {case (nid:String,t:Double) => if(nid == parentNode) true else false} ) match {
+                case Some((nid,t:Double)) => {
+                  val num = if(!reset) t+1
+                            else 0.0
+                  val updatedTally = tally.remove({case (nid:String,t:Double) => if(nid == parentNode) true else false} )
+                  logger.debug("Updating tally: " + num)
+                  substituteField(id,"entryTally",((nid,num)::updatedTally))
+	        }
+                case None => substituteField(id,"entryTally",((parentNode,1.0)::tally))
+	      }
+            }
+            case null => {
+              logger.debug("Updating tally: 1.0")
+              substituteField(id,"entryTally",List((parentNode,1.0)))
+	    }
+	  }
+	}
         case Some(List(_,_,("rows",Nil))) => {
           logger.debug("No entry tally found")
           false
@@ -350,7 +362,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       }
     }
 
-    override def getTally:Option[Double] = {
+    override def getTally( parentNode:String):Option[Double] = {
       val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + tallyView)
       //convert the json data
       val data = JSON.parse(jsonData)
@@ -361,8 +373,14 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           None
         }
         //extract data
-        case Some(List(_,_,("rows",List(List(("id",id:String),_,("value",num:Double)))))) => {
-          Some(num)
+        case Some(List(_,_,("rows",List(List(("id",id:String),_,("value",tally:List[_])))))) => {
+          var count = 0.0
+          for{ (nid:String,t:Double) <- tally
+                if nid == parentNode} {
+            count = t+1
+	  }
+          if( count > 0 ) Some(count)
+          else None
         }
         case Some(List(_,_,("rows",Nil))) => {
           logger.debug("No entry tally found")

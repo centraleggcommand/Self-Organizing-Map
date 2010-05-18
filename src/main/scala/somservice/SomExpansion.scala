@@ -18,51 +18,21 @@ class MapData( dbAgent:SomDbAgent)
   val logger = Logger.getLogger("somservice.SomExpansion.MapData")
   PropertyConfigurator.configure("log4j.properties")
   dbAgent.getPositionMapTree match {
-	case None => logger.info("checkExpansion got no map data")
-	case Some( levelData:PositionTree) => {
-	  //ids of all position maps
-/*
-       	  val levelIds = for( (mId,_,_) <- levelData) yield { mId }
-        //ids of all maps that are a parent to another map
-          val pLevelIds = for( (_,pMapId,_) <- levelData) yield {pMapId}
-        //ids of nodes that are parent to a map - the actual expansion
-        //source of a map.
-          val allpNodeIds = for( List(_,_,("value",pNId:String)) <- levelData) yield {pNId}
-	  */
-	  parentNodeIds = levelData.getSrcNodeIds
-	  //the map ids that aren't parents to another map are leaf maps
-	  //get the parent node ids of the leaf maps
-          leafParentNodes = levelData.getLeafSrcNodeIds
-/*
-	  leafParentNodes = diffList match {
-	    case Nil => {
-	      logger.info("checkExpansion got an empty leaf map list")
-	      List()
-	    }
-	    case leafMapIds:List[_] => {
-	      for{ mapId <- leafMapIds
-		   data <- levelData
-		   if{ data match {
-		     case List(("id",mId),_,_) => mapId == mId
-		     case _ => false
-		   }} 
-		 } yield {
-		   data match {
-		     case List(_,_,("value",pNodeId:String)) => pNodeId
-		     case _ => ""
-		   }
-		 }
-	    }
-	  }
-	  */ 
-	  logger.debug("Leaf map parent nodes:" + leafParentNodes)
-	}
+    case None => logger.info("checkExpansion got no map data")
+    case Some( levelData:PositionTree) => {
+      parentNodeIds = levelData.getSrcNodeIds
+      //the map ids that aren't parents to another map are leaf maps
+      //get the parent node ids of the leaf maps
+      leafParentNodes = levelData.getLeafSrcNodeIds
+      logger.debug("Leaf map parent nodes:" + leafParentNodes)
+    }
   }
 }
 
 class SomExpansion(dbAgent:SomDbAgent)
 {
   val initErr_c = 2.5
+  val levelMin_c = 4.0
   val hzMin_c = 4.0
   val expPercent = 0.75
   val logger = Logger.getLogger("somservice.SomExpansion")
@@ -73,69 +43,24 @@ class SomExpansion(dbAgent:SomDbAgent)
   def checkExpansion(winnerNodeId:String):Unit = {
     //get data about all the map levels
 
-/*
-      val allLevels:Option[List[Any]] = dbAgent.getPositionMapTree
-      allLevels match {
-	case None => logger.info("checkExpansion got no map data")
-	case Some(levelData:List[_]) => {
-	  //ids of all position maps
-	  val levelIds = for( List(("id",mId:String),_,_) <- levelData) yield { mId }
-        /*
-        val levelIds = for{ data <- levelData
-                            (tag,id) <- data
-                            if tag == "id" } yield { id }
-                            */
-        //ids of all maps that are a parent to another map
-          val pLevelIds = for( List(_,("key",pMapId),_) <- levelData) yield {pMapId}
-        /*
-        val pLevelIds = for{ data:List[Any] <- levelData
-                            (tag,id) <- data
-                            if tag == "key" } yield { id }
-                            */
-        //ids of nodes that are parent to a map - the actual expansion
-        //source of a map.
-          val allpNodeIds = for( List(_,_,("value",pNId:String)) <- levelData) yield {pNId}
-        /*
-        val allpNodeIds = for{ data:List[Any] <- levelData
-                            (tag,id) <- data
-                            if tag == "value" } yield { id }
-                            */
-	  val parentNodeIds = allpNodeIds.removeDuplicates
-	  //the map ids that aren't parents to another map are leaf maps
-	  val diffList = levelIds -- pLevelIds
-	  logger.debug("Leaf maps: " + diffList)
-	  //get the parent node ids of the leaf maps
-	  val leafParentNodes = diffList match {
-	    case Nil => {
-	      logger.info("checkExpansion got an empty leaf map list")
-	      List()
-	    }
-	    case leafMapIds:List[_] => {
-	      for{ mapId <- leafMapIds
-		   data <- levelData
-		   if{ data match {
-		     case List(("id",mId),_,_) => mapId == mId
-		     case _ => false
-		   }} 
-		 } yield {
-		   data match {
-		     case List(_,_,("value",pNodeId)) => pNodeId
-		     case _ => ""
-		   }
-		 }
-	    }
-	  }
-	  logger.debug("Leaf map parent nodes:" + leafParentNodes)
-	  */
           //The winner node is checked for vertical expansion.
           //Check if the node has already expanded 
        val mapData = new MapData( dbAgent)
        val leafParentNodes = mapData.getLeafParentIds
-       val parentNodeIds = mapData.getParentNodeIds
-          if( leafParentNodes.exists((x)=>x==winnerNodeId) ) {
-            logger.error("An entry was added to a non-leaf node")
-          }
-          else {
+       val parentNodeId = dbAgent.getParentNode( winnerNodeId) match {
+         case Some(id:String) => id
+         case None => ""
+       }
+       if( leafParentNodes.exists((x)=>x==winnerNodeId) ) {
+         logger.error("An entry was added to a non-leaf node")
+       }
+       else if( dbAgent.getChildDocNum(winnerNodeId) match {
+                case Some(num:Double) => if( num < levelMin_c) true else false
+                case None => true } ) {
+         //Don't vertically expand if a node has less than 4 entries
+         chkHorizontalExp( parentNodeId)
+       }
+       else {   
             //The first level map is compared to a deviation const
             val parentId = dbAgent.getParentNode( winnerNodeId) match {
               case Some(id) => id
@@ -157,7 +82,7 @@ class SomExpansion(dbAgent:SomDbAgent)
 	      //grow another level for nodes that have more error
 	        verticalExp(winnerNodeId)
               }
-              else chkHorizontalExp( parentNodeIds)
+              else chkHorizontalExp( parentNodeId)
             }
             //Non-first level nodes are compared against parent node
             else if( parentId != "") {
@@ -172,7 +97,7 @@ class SomExpansion(dbAgent:SomDbAgent)
               if( (winnerDeviation/parentDeviation) < expPercent) {
                 verticalExp(winnerNodeId)
               }
-              else chkHorizontalExp( parentNodeIds)
+              else chkHorizontalExp( parentNodeId)
             }
           }
 //	}
@@ -200,19 +125,20 @@ class SomExpansion(dbAgent:SomDbAgent)
     }
   }
 
-  private def chkHorizontalExp( parentNodeIds:List[String]) = {
+  private def chkHorizontalExp( parentNodeId:String) = {
+  //Check the number of entry insertions since last expansion
   //Go through all parent nodes for the maps and obtain child nodes. 
-    for( nodeId <- parentNodeIds) {
-      expandLevel( nodeId)
-    }
+      dbAgent.getTally(parentNodeId) match {
+        case Some(tally) => if( tally > hzMin_c ) expandLevel( parentNodeId)
+                            else logger.debug("Not horizontally expandin with tally: " + tally)
+        case None => logger.debug("Not horizontally expanding - no tally")
+      }
   }
 
   private def expandLevel( parentNodeId:String):Unit = {
     try {
 
-    dbAgent.getTally match {
-      case Some(tally) => if( tally > hzMin_c ) {
-        logger.debug("Attempting horizontal expansion")
+         logger.debug("Attempting horizontal expansion")
         val nodeDeviations = getNodeDeviations(parentNodeId) match {
           case Some(dev) => dev
           case None => Nil
@@ -240,13 +166,10 @@ class SomExpansion(dbAgent:SomDbAgent)
             val levelNodes = for( (node,num) <- nodeDeviations) yield node
             posMap.expand(errorNode, distantNode, levelNodes)
             //Reset the entry count for expansion
-            dbAgent.updateTally(true)
+            dbAgent.updateTally(parentNodeId,true)
           }
         }
-      }
-      case None => //do nothing
-    }
-
+ 
   } catch {
     case ex: RuntimeException => logger.error("Error in chkHorizontalExp: " + ex)
   }

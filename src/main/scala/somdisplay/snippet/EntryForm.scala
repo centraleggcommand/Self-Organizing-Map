@@ -43,7 +43,7 @@ class EntryForm  {
         insertRequest.cleanup
         logger.debug("Inserting the entry: " + entry)
       }
-      else ("Not inserting zero length entry")
+      else logger.debug("Not inserting zero length entry")
     }
     bind("entry", entryData,
       "db" -> SHtml.ajaxSelect(dbSelection, Full(initSelection), 
@@ -51,7 +51,7 @@ class EntryForm  {
                  val selMap = new MapDisplay
                  selMap.getMap( sel, sel)  }),
       "subject" -> SHtml.text( subject, subject = _),
-      "content" -> SHtml.textarea( entry, entry = _, "cols"->"40", "rows"->"6"),
+      "content" -> SHtml.textarea( entry, entry = _, "cols"->"60", "rows"->"6"),
     "submit" -> SHtml.submit("Submit", handleSubmit _))
   }
 

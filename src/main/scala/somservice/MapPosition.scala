@@ -165,7 +165,7 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
     }
   }
 
-  //find the row that contains the target node id
+  //find the row and col that contains the target node id - start from zero
   private def findPos(nId:String):Option[Tuple2[Int,Int]] = {
     def chkElement(row:Int, col:Int):Option[Tuple2[Int,Int]] = {
       //check boundary
@@ -217,8 +217,8 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
     //change to array of lists
     val arrList = gridArray.map(_.toList).toList
     //insert new row
-    val gridA = arrList.slice(0,bot)
-    val gridB = arrList.drop(bot)
+    val gridA = arrList.take(bot+1)
+    val gridB = arrList.drop(bot+1)
     val gridList = gridA:::(iRow.toList)::gridB
     positionDoc match {
       case None => {
@@ -235,17 +235,21 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
   }
 
   private def insertCol( rt:Int, lf:Int, levelNodes:List[Node] ):Unit = {
-    //Each row in the position map needs to have a new element added
+    //Each row in the position map needs to have a new element added.
+    //The new element is added between 'rt' and 'lf' parameters.
     try {
     logger.debug("Inserting a new column")
     val arrayOfLists = for( row <- gridArray ) yield {
-      //Create a new node
+      //Create a new node using weights from rt an lf neighbor.
       val n1 = levelNodes.find((x)=>{x.id==row(rt)})
       val n2 = levelNodes.find((x)=>{x.id==row(lf)})
       val nId = n1 match {
-        case None => {
+        case None => { //no rt neighbor, use only the lf neighbor weight
           n2 match {
-            case None => dbAgent.addInitNode(parent, null)
+            case None => {
+              logger.error("insertCol could not find neighbors")
+              dbAgent.addInitNode(parent, null)
+	    }
             case Some(node2) => dbAgent.addInitNode(parent, node2.weight)
           }
         }
@@ -258,7 +262,12 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
       }
       //Create updated position map row
       nId match {
-        case Some(id) => (row.slice(0,lf).toList):::id::(row.slice(lf,row.length-1)).toList
+        case Some(id) => {
+          logger.debug("added column node: " + id)
+          val freshrow = (row.take(lf+1).toList):::id::(row.drop(lf+1)).toList
+          logger.debug("fresh row: " + freshrow)
+          freshrow
+	}
         case None => {
           logger.error("Expansion node for new column could not be created")
           row.toList
@@ -282,6 +291,7 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
   private def meldWeights(w1:Map[String,Double], w2:Map[String,Double]):Map[String,Double] = {
     //Meld the weights of two nodes
     //Fxn to combine values if a key also exists in w2
+    logger.debug("Attempting to meld weights for expansion node")
     val combine = (k:String,v:Double) => { 
       if(w2.contains(k)) (v + w2(k))/2
       else v

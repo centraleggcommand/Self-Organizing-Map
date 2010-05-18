@@ -49,6 +49,10 @@ class SomInsertion(data:SomEntry)
     cycleThruLevels( startNode, startNode, 0.0) match {
       case Some((nodeId:String,dist:Double)) => {
           dbAgent.addEntry(nodeId, dist, subject, origContent)
+          dbAgent.getParentNode( nodeId) match {
+            case Some(id:String) => dbAgent.updateTally( id, false)
+            case None => //do nothing
+	  }
           val expansion = new SomExpansion(dbAgent)
           expansion.checkExpansion(nodeId)
       }

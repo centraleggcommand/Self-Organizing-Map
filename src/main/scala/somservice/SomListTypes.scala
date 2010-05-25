@@ -1,6 +1,39 @@
 package somservice
 
+import scala.collection.mutable.ListBuffer
+
 abstract class ListType
+
+case class PositionData( id:String,grid:List[_]) extends ListType
+{
+  private val gridList = new ListBuffer[List[String]]
+  private val gridArray = new Array[Array[String]](grid.length)
+  //constructor
+  for( row <- grid) {
+    var counter = 0 //used to keep track of index for insert into gridArray
+    row match {
+      case myrow:List[_] => {
+        val tmpList = new ListBuffer[String]
+        for(rowItem <- myrow) {
+          rowItem match {
+            case item:String => tmpList += item
+            case _ => //do nothing
+          }
+        }
+        if( tmpList.length > 0 ) {
+          gridList += tmpList.toList
+          gridArray(counter) = tmpList.toArray
+          counter = counter + 1
+        }
+      }
+    }
+  }
+
+  def getGridList = gridList.toList
+  def getGridArray = gridArray
+
+}
+
 case class PositionTree( mapData:List[Tuple3[String,String,String]] ) extends ListType
 {
   def getSrcNodeIds = {
@@ -19,4 +52,9 @@ case class PositionTree( mapData:List[Tuple3[String,String,String]] ) extends Li
        } yield pNodeId
   }
     
+}
+case class NodeEntry( entryData:List[Tuple3[String,String,String]] ) extends ListType
+{
+  def getEntryData:List[Tuple3[String,String,String]] = entryData
+  def getEntrySubjects:List[String] = for ((id,subj,content) <- entryData) yield {subj}
 }

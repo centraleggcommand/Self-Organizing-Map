@@ -182,7 +182,7 @@ class SomExpansion(dbAgent:SomDbAgent)
       //Perform insertion of each entry belonging to the winner node into
       //new nodes in a new map.
       val entryData = dbAgent.getEntries(winnerNodeId) match {
-        case Some(data) => data
+        case Some(data:NodeEntry) => data.getEntryData
         case None => Nil
       }
       for( (id,subject:String,content:String) <- entryData) {

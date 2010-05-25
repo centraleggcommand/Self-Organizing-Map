@@ -49,6 +49,7 @@ class EntryForm  {
       "db" -> SHtml.ajaxSelect(dbSelection, Full(initSelection), 
         { sel => dbName = sel
                  val selMap = new MapDisplay
+                 logger.debug("getMap being called")
                  selMap.getMap( sel, sel)  }),
       "subject" -> SHtml.text( subject, subject = _),
       "content" -> SHtml.textarea( entry, entry = _, "cols"->"60", "rows"->"6"),

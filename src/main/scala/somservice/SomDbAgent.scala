@@ -19,6 +19,10 @@ import org.apache.log4j.PropertyConfigurator
 import java.io._
 import scala.util.parsing.json._
 import jsonwriter._
+import org.apache.http.auth.{AuthScope,AuthState,UsernamePasswordCredentials}
+import org.apache.http.impl.auth.BasicScheme
+import org.apache.http.client.protocol.ClientContext
+import org.apache.http.protocol.{HttpContext,BasicHttpContext,ExecutionContext}
 
 abstract class SomDbAgent(dbName:String)
 {
@@ -43,7 +47,7 @@ abstract class SomDbAgent(dbName:String)
   def updateTally(parentNode:String, reset:Boolean):Boolean
   def getTally(parentNode:String):Option[Double]
   //Get a representation of the location of every node on a som layer
-  def getPositionDoc(parent:String):Option[Tuple2[String,List[Any]]]
+  def getPositionDoc(parent:String):Option[ListType]
   //Create a new position map
   def addPositionDoc(parent:String):Boolean
   //Change the position data
@@ -61,7 +65,7 @@ abstract class SomDbAgent(dbName:String)
   //Get the number of documents mapped to a node
   def getChildDocNum(parent:String):Option[Double]
   //Get entry subject and content for all entries under a node
-  def getEntries(parent:String):Option[List[Tuple3[Any,Any,Any]]]
+  def getEntries(parent:String):Option[ListType]
   //Get the parent node id for a node
   def getParentNode(nodeId:String):Option[String]
 }
@@ -70,7 +74,9 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
 {
     val dbName = if(dbn.length > 0) dbn
                  else "dummy"
-    val couchUri = "http://127.0.0.1:34719/"
+    val couchHost = new HttpHost("localhost", 34719)
+    val couchUri = couchHost.toURI
+    //val couchUri = "http://centraleggcommand.org/couchdb/"
     val dbView = "_design/sominsert"
     val parentWeightView = "parentWeight"
     val wordView = "globalWeight"
@@ -89,10 +95,10 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       ConnManagerParams.setMaxTotalConnections(params, 200)
       // Increase default max connection per route to 20
       val connPerRoute:ConnPerRouteBean = new ConnPerRouteBean(20)
-      // Increase max connections for localhost:80 to 50
-      val localhost:HttpHost = new HttpHost("locahost", 80)
-      connPerRoute.setMaxForRoute(new HttpRoute(localhost), 50)
+      // Increase max connections for localhost:port# to 50
+      connPerRoute.setMaxForRoute(new HttpRoute(couchHost), 50)
       ConnManagerParams.setMaxConnectionsPerRoute(params, connPerRoute)
+      ConnManagerParams.setTimeout(params, 20000)
       val schemeRegistry:SchemeRegistry = new SchemeRegistry
       schemeRegistry.register(
               new Scheme("http", PlainSocketFactory.getSocketFactory(), 80))
@@ -101,6 +107,55 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       val cm:ClientConnectionManager = new ThreadSafeClientConnManager(params, schemeRegistry)
       new DefaultHttpClient(cm, params)
     }
+
+    //setup httpclient to allow user password authentication in uri
+    val defaultcreds = new UsernamePasswordCredentials("rlisam", "rlisam")
+    val defaultscope = new AuthScope(couchHost.getHostName, couchHost.getPort, AuthScope.ANY_REALM)
+    client.getCredentialsProvider.setCredentials( defaultscope, defaultcreds)
+    val basicAuth = new BasicScheme
+    val localcontext = new BasicHttpContext()
+    localcontext.setAttribute("preemptive-auth", basicAuth)
+
+    object PreemptiveAuth extends HttpRequestInterceptor {
+    
+      def process( request:HttpRequest, context:HttpContext) {
+        val authState = 
+          context.getAttribute( ClientContext.TARGET_AUTH_STATE) match {
+            case a:AuthState => a
+            case _ => null
+	  }
+        val credsProvider = 
+          context.getAttribute( ClientContext.CREDS_PROVIDER) match {
+            case c:CredentialsProvider => c
+            case _ => null
+	  }
+        val targetHost = 
+          context.getAttribute( ExecutionContext.HTTP_TARGET_HOST) match {
+            case h:HttpHost => h
+            case _ => null
+	  }
+        // If not auth scheme has been initialized yet
+        if (authState.getAuthScheme() == null) {
+            logger.debug("needing to initialize auth scheme")
+            val authScope = new AuthScope(
+                    targetHost.getHostName(), 
+                    targetHost.getPort())
+            // Obtain credentials matching the target host
+            val creds = credsProvider.getCredentials(authScope)
+            // If found, generate BasicScheme preemptively
+            if (creds != null) {
+                authState.setAuthScheme(new BasicScheme())
+                authState.setCredentials(creds)
+            }
+        }
+      }
+
+    }
+
+    // Add as the very first interceptor in the protocol chain
+    client.addRequestInterceptor(PreemptiveAuth, 0);
+
+
     val logger = Logger.getLogger("somservice.CouchAgent")
 
     PropertyConfigurator.configure("log4j.properties")
@@ -122,7 +177,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     override def shutdown:Unit = client.getConnectionManager.shutdown
 
     override def getAllDbs:List[String] = {
-      val req = couchUri + "_all_dbs"
+      val req = couchUri + "/_all_dbs"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
       data match {
@@ -130,7 +185,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           logger.error("getAllDbs db error: " + r)
           Nil
         }
-        case Some(dbs:List[_]) => dbs.map(_.toString)
+        case Some(dbs:List[_]) => dbs.map(_.toString).remove((x)=>x=="_users")
         case None => {
           logger.error("getAllDbs fxn got no db response")
           Nil
@@ -143,7 +198,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     override def addInitNode(parent:String, wordCount:Map[String,Double]):Option[String] = {
       getUuid match {
         case Some(id) => {
-          val addr = couchUri + dbName + "/" + id
+          val addr = couchUri + "/" + dbName + "/" + id
           //create json data
           val jdata1 = new JsObject(List(("maptype","node")))
           val jdata2 = jdata1.addField(("parent",parent))
@@ -174,7 +229,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       logger.debug("Trying to add a position doc")
       getUuid match {
         case Some(id) => {
-          val addr = couchUri + dbName + "/" + id
+          val addr = couchUri + "/" + dbName + "/" + id
           //create json data
           val jdata1 = new JsObject(List(("maptype","position")))
           val jdata2 = jdata1.addField(("grid",Nil))
@@ -213,7 +268,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       logger.debug("Trying to add a tally doc")
       getUuid match {
         case Some(id) => {
-          val addr = couchUri + dbName + "/" + id
+          val addr = couchUri + "/" + dbName + "/" + id
           //create json data
           val jdata1 = new JsObject(List(("maptype","tally")))
           val jdata2 = jdata1.addField(("entryTally",Nil))
@@ -245,48 +300,11 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     override def updateNode(upData:Node):Boolean = {
       substituteField(upData.id,"weight",upData.weight.toList)
     }
- /*     //get the revision number for the doc
-      val revRequest = couchUri + dbName + "/" + upData.id
-      val jsonData = dbGet(revRequest)
-      val data = JSON.parse(jsonData)
-      //extract rev and parent values
-      val retrievedData:Tuple2[String,String] = data match {
-        case Some(nodeData:List[_]) => {
-          val revField = nodeData.find((field) => field match { case ("_rev",_) => true; case _ => false} )
-          val rev = revField match {
-            case Some((_,r:String)) => r
-            case None => throw new RuntimeException("updateNode found a node with no rev") }
-          val parentField = nodeData.find((field) => field match { case ("parent",_) => true; case _ => false} )
-          val parent = parentField match {
-            case Some((_,p:String)) => p
-            case None => throw new RuntimeException("updateNode found a node with no parent")
-          }
-          //My return values
-          (rev, parent)
-        }
-        case _ => throw new RuntimeException("Could not get node data from database")
-      }
-      val jdata1 = new JsObject(List(("maptype","node")))
-      val jdata2 = jdata1.addField(("parent",retrievedData._2))
-      val jdata3 = jdata2.addField(("weight",upData.weight.toList))
-      val jdata4 = jdata3.addField(("_rev",retrievedData._1))
-      val jsonSend = jdata4.toJson
-      val response = dbPut(revRequest, jsonSend)
-      val rdat = JSON.parse(response)
-      rdat match {
-        case Some(List(("error",_),("reason",reason))) => "Error: " + reason
-        case Some(a) => "Updated node: " + a
-        case None => "Likely error in updateNode attempt"
-      }
-    }
-*/
-
-
 
     override def addEntry(parent:String, deviation:Double, subject:String, content:String): Boolean = {
       getUuid match {
         case Some(id) => {
-          val addr = couchUri + dbName + "/" + id
+          val addr = couchUri + "/" + dbName + "/" + id
           //create json data
           val jdata1 = new JsObject(List(("maptype","entry")))
           val jdata2 = jdata1.addField(("parent",parent))
@@ -321,7 +339,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     }  
 
     override def updateTally( parentNode:String, reset:Boolean):Boolean = {
-      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + tallyView)
+      val jsonData = dbGet(couchUri + "/" + dbName + "/" + dbView + "/_view/" + tallyView)
       //convert the json data
       val data = JSON.parse(jsonData)
       data match {
@@ -363,7 +381,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     }
 
     override def getTally( parentNode:String):Option[Double] = {
-      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + tallyView)
+      val jsonData = dbGet(couchUri + "/" + dbName + "/" + dbView + "/_view/" + tallyView)
       //convert the json data
       val data = JSON.parse(jsonData)
       data match {
@@ -394,7 +412,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     }
 
     override def getAvgNodeDeviation(parent:String):Option[Double] = {
-      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + entryDevView + "?key=%22" + parent + "%22")
+      val jsonData = dbGet(couchUri + "/" + dbName + "/" + dbView + "/_view/" + entryDevView + "?key=%22" + parent + "%22")
       //convert the json data
       val data = JSON.parse(jsonData)
       logger.debug("entry deviation avg: " + data)
@@ -418,7 +436,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     override def getNodesUsingParent(parent:String):Option[List[Node]] = {
       //call predefined db fxn for specific parent; whenever a new level is 
       //created for a node, a parent fxn should be defined in db
-      val jsonData = dbGet(couchUri + dbName + "/" + dbView + "/_view/" + parentWeightView + "?key=%22" + parent + "%22")
+      val jsonData = dbGet(couchUri + "/" + dbName + "/" + dbView + "/_view/" + parentWeightView + "?key=%22" + parent + "%22")
       //convert the json data
       val data = JSON.parse(jsonData)
       data match {
@@ -446,8 +464,8 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       }
     }
 
-    override def getPositionDoc(parent:String):Option[Tuple2[String,List[Any]]] = {
-      val req = couchUri + dbName + "/" + dbView + "/_view/" + posView + "?key=%22" + parent + "%22"
+    override def getPositionDoc(parent:String):Option[PositionData] = {
+      val req = couchUri + "/" + dbName + "/" + dbView + "/_view/" + posView + "?key=%22" + parent + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
       data match {
@@ -460,9 +478,9 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
             case posRows:List[_] => {
               //Re-occuring problem: how to match multileveled Lists with
               //an unknown number of elements and property of type erasure.
-              Some((id,posRows))
+              Some(PositionData(id,posRows))
             }
-            case null => Some((id, Nil))
+            case null => Some(PositionData(id, Nil))
             case _ => {
               logger.error("getPositionDoc did not recognize value: " + grid)
               None
@@ -488,7 +506,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     }
 
     override def getNodeMap(nodeId:String):Option[String] = {
-      val req = couchUri + dbName + "/" + dbView + "/_view/" + nodePosView + "?key=%22" + nodeId + "%22"
+      val req = couchUri + "/" + dbName + "/" + dbView + "/_view/" + nodePosView + "?key=%22" + nodeId + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
       data match {
@@ -515,7 +533,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     //This fxn assumes that the database ref by dbAgent is only used by 
     //a single som
     override def getPositionMapTree:Option[ListType] = {
-      val req = couchUri + dbName + "/" + dbView + "/_view/" + allMapsView
+      val req = couchUri + "/" + dbName + "/" + dbView + "/_view/" + allMapsView
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
       logger.debug("db get allmaps: " + data)
@@ -540,7 +558,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     private def substituteField(id:String,fieldName:String,subData:Any):Boolean = {
       //Remove from the origDoc the field and value that needs to be changed
       //and add the new data.
-      val revRequest = couchUri + dbName + "/" + id
+      val revRequest = couchUri + "/" + dbName + "/" + id
       val jsonData = dbGet(revRequest)
       val data = JSON.parse(jsonData)
       data match {
@@ -581,7 +599,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
 
 
     override def getGlobalWordCount(word:String):Option[Double] = {
-      val req = couchUri + dbName + "/" + dbView + "/_view/" + wordView + "?group=true&key=%22" + word + "%22"
+      val req = couchUri + "/" + dbName + "/" + dbView + "/_view/" + wordView + "?group=true&key=%22" + word + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
       data match {
@@ -605,7 +623,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     }
 
     override def getChildDocNum(parent:String):Option[Double] = {
-      val req = couchUri + dbName + "/" + dbView + "/_view/" + childView + "?key=%22" + parent + "%22"
+      val req = couchUri + "/" + dbName + "/" + dbView + "/_view/" + childView + "?key=%22" + parent + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
       data match {
@@ -629,22 +647,26 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     }
 
     //This returns the subject and content of entries with the given parent.
-    override def getEntries(parent:String):Option[List[Tuple3[Any,Any,Any]]] = {
-      val req = couchUri + dbName + "/" + dbView + "/_view/" + entrySCView + "?key=%22" + parent + "%22"
+    //override def getEntries(parent:String):Option[List[Tuple3[Any,Any,Any]]] = {
+      override def getEntries(parent:String):Option[NodeEntry] = {
+      val req = couchUri + "/" + dbName + "/" + dbView + "/_view/" + entrySCView + "?key=%22" + parent + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
+      logger.debug("entry raw for parent - " + parent + " : " + data)
       data match {
         //check if the parent fxn existed
         case Some(List(("error",_),("reason",reason))) => {
           logger.error("getEntries error: " + reason)
           None
         }
+        case Some(List(_,_,("rows", Nil))) => None
         //extract data
         case Some(List(_,_,("rows", data:List[_]))) => { 
-          val scData = for( List(("id",id),("key",_),("value",List(subject,content))) <- data) yield {
+          logger.debug("need to extract entry: " + data)
+          val scData = for( List(("id",id:String),("key",_),("value",List(subject:String,content:String))) <- data) yield {
             (id,subject,content)
           }
-          if(scData.length > 0) Some(scData)
+          if(scData.length > 0) Some(NodeEntry(scData))
           else None
         }
         case Some(_) => {
@@ -660,7 +682,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
 
     //Return the parent node id for a node
     override def getParentNode(nodeId:String):Option[String] = {
-      val jsonData = dbGet(couchUri + dbName + "/" + nodeId)
+      val jsonData = dbGet(couchUri + "/" + dbName + "/" + nodeId)
       //convert the json data
       val data = JSON.parse(jsonData)
       logger.debug("node parent: " + data)
@@ -700,7 +722,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
     }
 
     private def createDb:Boolean = {
-      val jsonResult = dbPut(couchUri + dbName)
+      val jsonResult = dbAuthPut(couchUri + "/" + dbName)
       val result = JSON.parse(jsonResult)
       result match {
         case Some(("error",_)::rest) => {
@@ -713,7 +735,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,parentWeightView,wordView,childView,posView,nodePosView,allMapsView,entryDevView,entrySCView,tallyView))
           val jsonData = fxnObj.toJson
           logger.debug("Inserting json for db views: " + jsonData)
-          val response = dbPut(couchUri + dbName + "/" + dbView, jsonData)
+          val response = dbAuthPut(couchUri + "/" + dbName + "/" + dbView, jsonData)
           JSON.parse(response) match {
             //just logging any error but no resolution
             case Some(("error",_)::rest) => {
@@ -732,7 +754,8 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       val response = client.execute(httpPut)
       val rEnt = response.getEntity()
       val output = EntityUtils.toString(rEnt)
-      httpPut.abort
+      //httpPut.abort
+      //rEnt.consumeContent
       output
     }
 
@@ -743,7 +766,30 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       val response = client.execute(httpPut)
       val rEnt = response.getEntity()
       val output = EntityUtils.toString(rEnt)
-      httpPut.abort
+      //httpPut.abort
+      //rEnt.consumeContent
+      output
+    }
+
+    private def dbAuthPut(request:String):String = {
+      val httpPut = new HttpPut(request)
+      val response = client.execute(couchHost, httpPut, localcontext)
+      val rEnt = response.getEntity()
+      val output = EntityUtils.toString(rEnt)
+      //httpPut.abort
+      //rEnt.consumeContent
+      output
+    }
+
+     private def dbAuthPut(request:String, data:String):String = {
+      val httpPut = new HttpPut(request)
+      val entityData = new StringEntity(data)
+      httpPut.setEntity(entityData)
+      val response = client.execute(couchHost, httpPut, localcontext)
+      val rEnt = response.getEntity()
+      val output = EntityUtils.toString(rEnt)
+      //httpPut.abort
+      //rEnt.consumeContent
       output
     }
 
@@ -752,17 +798,19 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       val response = client.execute(httpget)
       val rEnt = response.getEntity()
       val output = EntityUtils.toString(rEnt)
-      httpget.abort
+      //httpget.abort
+      //rEnt.consumeContent
       output
     }
 
     def getUuid:Option[String] = {
-      val httpget = new HttpGet(couchUri + "_uuids")
+      val httpget = new HttpGet(couchUri + "/_uuids")
       val response = client.execute(httpget)
       val rEnt = response.getEntity()
       val rData = EntityUtils.toString(rEnt)
       val rJson = JSON.parse(rData)
-      httpget.abort
+      //httpget.abort
+      //rEnt.consumeContent
       rJson match {
         case Some(("uuids",List(id:String))::rest) => Some(id)
         case None => None

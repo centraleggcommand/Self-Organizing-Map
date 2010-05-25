@@ -49,16 +49,16 @@ class MapDisplay {
     val layerNodes = dbAgent.getNodesUsingParent(parent)
     val infoDisplay = layerNodes match {
       case Some(nodes:List[_]) => {
-        //Each node will be represented by a list of its top 5 words.
+        //Each node will be represented by a list of .
         //The html will be a table of ajax anchors.
         val posMap = new MapPosition(dbAgent, parent)
-        if( posMap.gridArray.length > 0) showNodes(nodes,posMap)
+        if( posMap.positionData.getGridArray.length > 0) showNodes(posMap)
         else Text("Error in obtaining map")
       }
       case None => {
         //Get all child entries for this parent
         dbAgent.getEntries(parent) match {
-          case Some(entryData:List[_]) => showEntries(entryData)
+          case Some(entryData:NodeEntry) => showEntries(entryData)
           case None => {SHtml.a(()=> getPrevMap, Text("Go up to previous map"))} ++ <br/> ++ Text("No entries found for selected node")
         }
       }
@@ -83,41 +83,57 @@ class MapDisplay {
     else JsCmds.SetHtml(mapDisplayId, Text("No previous map"))
   }
 
-  private def showNodes(members:List[Any], posMap:MapPosition): NodeSeq = {
+  //private def showNodes(members:List[Any], posMap:MapPosition): NodeSeq = {
+    private def showNodes( posMap:MapPosition): NodeSeq = {
     val elements = new ListBuffer[NodeSeq]
     //loop updates elements
-    for( row:Array[Any] <- posMap.gridArray) {
+    for( row:Array[String] <- posMap.positionData.getGridArray) {
+      logger.debug("going through map row: ")
       val myrow = new ListBuffer[NodeSeq]
       //loop updates myrow
-      for( id <- row) {
+      for( id:String <- row) {
+      logger.debug("map row node id: " + id)
       //look for the id that matches a node
-        val nodeEle = members.find({case somservice.Node(nId:String,_) => nId == id})
+        //val nodeEle = members.find({case somservice.Node(nId:String,_) => nId == id})
         //create table data item
-        nodeEle match {
-          case Some(nd@somservice.Node(_,_)) => {
+        //nodeEle match {
+          //case Some(nd@somservice.Node(_,_)) => {
             val dbName = posMap.dbAgent.getDbName
-            val anchor = <td>{SHtml.a(()=> getMap(dbName, nd.id), Text(nd.getTopWords(dbName).reduceLeft((x,y) => x +"," + y)) ) }</td>
-            myrow += anchor
-          }
-          case None => {
-            val emptyAnchor = <td> </td>
-            myrow += emptyAnchor
-          }
-        }
+            posMap.dbAgent.getEntries(id) match {
+              case Some(entries:NodeEntry) => {
+                val nodeSubjects = entries.getEntrySubjects
+                logger.debug("showNodes subjects: " + nodeSubjects.take(5))
+                val anchor = <td>{SHtml.a(()=> getMap(dbName, id), Text(nodeSubjects.take(5).reduceLeft((x,y) => x +"," + y)) ) }</td>
+                myrow += anchor
+	      }
+              case None => {
+                logger.debug("setting empty anchor")
+                val emptyAnchor = <td> </td>
+                myrow += emptyAnchor
+              }
+	    }
+            //val anchor = <td>{SHtml.a(()=> getMap(dbName, nd.id), Text(nd.getTopWords(dbName).reduceLeft((x,y) => x +"," + y)) ) }</td>
+       //   }
+       //   case None => {
+       //     val emptyAnchor = <td> </td>
+       //     myrow += emptyAnchor
+       //   }
+      //  }
       }
       elements += <tr>{myrow.reduceLeft(_ ++ _)}</tr>
     }
     val mapData = <table border="2">{elements.reduceLeft(_ ++ _)}</table>
+    logger.debug("mapdata: " + mapData)
     //Provide a link to previous map display if this is not the first
     if( currentMapVar.is.length > 0) {SHtml.a(()=> getPrevMap, Text("Go up to previous map"))} ++ <br/> ++ {mapData}
     else mapData
 
   }
 
-  private def showEntries(entryData:List[Any]) = {
+  private def showEntries(entryData:NodeEntry) = {
     val elements = new ListBuffer[NodeSeq]
-    for( (id,subject,content) <- entryData) {
-      elements += <tr><td>Subject: {subject.toString}</td></tr><tr><td>{content.toString}</td></tr>
+    for( (id,subject,content) <- entryData.getEntryData) {
+      elements += <tr><td>Subject: {subject}</td></tr><tr><td>{content}</td></tr>
     }
     //Provide a link to previous map display if this is not the first
     {SHtml.a(()=> getPrevMap, Text("Go up to previous map"))} ++ <br/> ++ <table>{elements.reduceLeft(_ ++ _)}</table>

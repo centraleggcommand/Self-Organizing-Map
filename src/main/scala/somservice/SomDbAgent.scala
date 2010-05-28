@@ -136,7 +136,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
 	  }
         // If not auth scheme has been initialized yet
         if (authState.getAuthScheme() == null) {
-            logger.debug("needing to initialize auth scheme")
             val authScope = new AuthScope(
                     targetHost.getHostName(), 
                     targetHost.getPort())
@@ -652,7 +651,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       val req = couchUri + "/" + dbName + "/" + dbView + "/_view/" + entrySCView + "?key=%22" + parent + "%22"
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
-      logger.debug("entry raw for parent - " + parent + " : " + data)
       data match {
         //check if the parent fxn existed
         case Some(List(("error",_),("reason",reason))) => {

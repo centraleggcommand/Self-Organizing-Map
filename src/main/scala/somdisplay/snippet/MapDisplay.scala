@@ -52,7 +52,7 @@ class MapDisplay {
         //Each node will be represented by a list of .
         //The html will be a table of ajax anchors.
         val posMap = new MapPosition(dbAgent, parent)
-        if( posMap.positionData.getGridArray.length > 0) showNodes(posMap)
+        if( posMap.positionData.getGridList.length > 0) showNodes(posMap)
         else Text("Error in obtaining map")
       }
       case None => {
@@ -84,49 +84,45 @@ class MapDisplay {
   }
 
   //private def showNodes(members:List[Any], posMap:MapPosition): NodeSeq = {
-    private def showNodes( posMap:MapPosition): NodeSeq = {
+  private def showNodes( posMap:MapPosition): NodeSeq = {
+    val dbName = posMap.dbAgent.getDbName
     val elements = new ListBuffer[NodeSeq]
-    //loop updates elements
-    for( row:Array[String] <- posMap.positionData.getGridArray) {
-      logger.debug("going through map row: ")
-      val myrow = new ListBuffer[NodeSeq]
-      //loop updates myrow
-      for( id:String <- row) {
-      logger.debug("map row node id: " + id)
-      //look for the id that matches a node
-        //val nodeEle = members.find({case somservice.Node(nId:String,_) => nId == id})
-        //create table data item
-        //nodeEle match {
-          //case Some(nd@somservice.Node(_,_)) => {
-            val dbName = posMap.dbAgent.getDbName
-            posMap.dbAgent.getEntries(id) match {
-              case Some(entries:NodeEntry) => {
-                val nodeSubjects = entries.getEntrySubjects
-                logger.debug("showNodes subjects: " + nodeSubjects.take(5))
-                val anchor = <td>{SHtml.a(()=> getMap(dbName, id), Text(nodeSubjects.take(5).reduceLeft((x,y) => x +"," + y)) ) }</td>
-                myrow += anchor
-	      }
-              case None => {
-                logger.debug("setting empty anchor")
-                val emptyAnchor = <td> </td>
-                myrow += emptyAnchor
-              }
-	    }
-            //val anchor = <td>{SHtml.a(()=> getMap(dbName, nd.id), Text(nd.getTopWords(dbName).reduceLeft((x,y) => x +"," + y)) ) }</td>
-       //   }
-       //   case None => {
-       //     val emptyAnchor = <td> </td>
-       //     myrow += emptyAnchor
-       //   }
-      //  }
-      }
-      elements += <tr>{myrow.reduceLeft(_ ++ _)}</tr>
+    val gridList = posMap.positionData.getGridList
+    for( gridrow <- gridList) {
+       val rs = getRowSubjects( gridrow)
+       if( rs.length > 0) {
+         elements += <tr>{rs.reduceLeft(_ ++ _)}</tr>
+       }
     }
-    val mapData = <table border="2">{elements.reduceLeft(_ ++ _)}</table>
-    logger.debug("mapdata: " + mapData)
-    //Provide a link to previous map display if this is not the first
-    if( currentMapVar.is.length > 0) {SHtml.a(()=> getPrevMap, Text("Go up to previous map"))} ++ <br/> ++ {mapData}
-    else mapData
+    def getRowSubjects( row:List[String]):List[NodeSeq] = {
+      val rowbuf = new ListBuffer[NodeSeq]
+      for( id <- row) {
+        id match {
+          case myid:String => {
+	    posMap.dbAgent.getEntries(myid) match {
+	      case Some(entries:NodeEntry) => {
+		val nodeSubjects = entries.getEntrySubjects
+		val anchor = <td>{SHtml.a(()=> getMap(dbName, myid), Text(nodeSubjects.take(5).reduceLeft((x,y) => x +"," + y)) ) }</td>
+		rowbuf += anchor
+	      }
+	      case None => {
+		logger.debug("setting empty anchor")
+		val emptyAnchor = <td> </td>
+		rowbuf += emptyAnchor
+	      }
+	    }
+	  }
+        }
+      }
+      rowbuf.toList
+    }
+    if( elements.length > 0) {
+      val mapData = <table border="2">{elements.reduceLeft(_ ++ _)}</table>
+      //Provide a link to previous map display if this is not the first
+      if( currentMapVar.is.length > 0) {SHtml.a(()=> getPrevMap, Text("Go up to previous map"))} ++ <br/> ++ {mapData}
+      else mapData
+    }
+    else Text("Could not obtain map info")
 
   }
 

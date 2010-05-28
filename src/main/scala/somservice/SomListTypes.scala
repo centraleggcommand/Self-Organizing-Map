@@ -1,16 +1,20 @@
 package somservice
 
 import scala.collection.mutable.ListBuffer
+import org.apache.log4j.{Logger, PropertyConfigurator}
 
 abstract class ListType
 
 case class PositionData( id:String,grid:List[_]) extends ListType
 {
+  val logger = Logger.getLogger("somservice.SomListTypes")
+  PropertyConfigurator.configure("log4j.properties")
+
   private val gridList = new ListBuffer[List[String]]
-  private val gridArray = new Array[Array[String]](grid.length)
+  //private val gridArray = new Array[Array[String]](grid.length)
   //constructor
   for( row <- grid) {
-    var counter = 0 //used to keep track of index for insert into gridArray
+    //var counter = 0 //used to keep track of index for insert into gridArray
     row match {
       case myrow:List[_] => {
         val tmpList = new ListBuffer[String]
@@ -21,16 +25,17 @@ case class PositionData( id:String,grid:List[_]) extends ListType
           }
         }
         if( tmpList.length > 0 ) {
+          logger.debug("creating position data row: " + tmpList.toList)
           gridList += tmpList.toList
-          gridArray(counter) = tmpList.toArray
-          counter = counter + 1
+          //gridArray(counter) = tmpList.toArray
+          //counter = counter + 1
         }
       }
     }
   }
 
   def getGridList = gridList.toList
-  def getGridArray = gridArray
+  //def getGridArray = gridArray
 
 }
 

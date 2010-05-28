@@ -33,7 +33,7 @@ class SomExpansion(dbAgent:SomDbAgent)
 {
   val initErr_c = 2.5
   val levelMin_c = 4.0
-  val hzMin_c = 4.0
+  val hzMin_c = 1.5
   val expPercent = 0.75
   val logger = Logger.getLogger("somservice.SomExpansion")
   PropertyConfigurator.configure("log4j.properties")
@@ -126,13 +126,20 @@ class SomExpansion(dbAgent:SomDbAgent)
   }
 
   private def chkHorizontalExp( parentNodeId:String) = {
-  //Check the number of entry insertions since last expansion
-  //Go through all parent nodes for the maps and obtain child nodes. 
+  //Check the number of entry insertions for this map since last expansion.
+  //This number should be greater than some constant multiplied by
+  //the number of nodes.
+    val numNodes = dbAgent.getNodesUsingParent(parentNodeId) match {
+      case Some(levelNodes) => levelNodes.length
+      case None => 0
+    }
+    if( numNodes > 0) {
       dbAgent.getTally(parentNodeId) match {
-        case Some(tally) => if( tally > hzMin_c ) expandLevel( parentNodeId)
+        case Some(tally) => if( tally > (hzMin_c*numNodes) ) expandLevel( parentNodeId)
                             else logger.debug("Not horizontally expandin with tally: " + tally)
         case None => logger.debug("Not horizontally expanding - no tally")
       }
+    }
   }
 
   private def expandLevel( parentNodeId:String):Unit = {

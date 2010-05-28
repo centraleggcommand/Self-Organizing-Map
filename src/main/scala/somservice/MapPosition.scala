@@ -17,11 +17,27 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
     case Some(pd:PositionData) => pd
   }
 
+  val gridList:List[List[String]] = positionData.getGridList
+  val gridArray:Array[Array[String]] = {
+    //ListBuffer type being used to convert lists to arrays
+    //because the toArray method of regular List type returns Array[Any]
+    val tmpgrid = new mutable.ListBuffer[Array[String]]
+    for( row <- gridList) {
+      val tmprow = new mutable.ListBuffer[String]
+      for( item:String <- row) {
+        tmprow += item
+      }
+      tmpgrid += tmprow.toArray
+    }
+    tmpgrid.toArray
+  }
+
+
   //The map position is saved with rows in descending order
   //and columns in descending order because it better suits
   //a list implementation.
   def addInitNodePosition(nodeId:String):Unit = {
-    if( positionData.getGridArray.length == 0) {
+    if( gridList.length == 0) {
       dbAgent.updatePositionDoc(positionData.id,List(List(nodeId)))
     }
     else {
@@ -61,26 +77,24 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
             }
           }
 	  */
-        val gridArray = positionData.getGridArray
+        //val gridArray = positionData.getGridArray
         val modGrid:List[List[String]] = {
           //Match length of all rows
-          val topLength = gridArray.last.length
+          val topLength = gridList.last.length
           var modified = false
-          if( gridArray(0).length < topLength) {
-            //use of array avoids type erasure as with List type
-            val tmpgrid = for( row:Array[String] <- gridArray) yield {
-              //
+          if( gridList.head.length < topLength) {
+            //what type is row seen as?
+            for( row <- gridList) yield {
               if( !modified && row.length < topLength) {
                 modified = true
                 //change array to list to make use of list constructor
-                nodeId::row.toList
+                nodeId::row
               }
-              else row.toList
+              else row
             }
-            tmpgrid.toList
 	  }
-          //Add a row if I have a rectangle with more columns
-          else if( gridArray.length < topLength) {
+          //Add a row if I have a rectangle with more columns than rows
+          else if( gridList.length < topLength) {
             //Need to transform list[Any] to list[list]
 /*
             val listoflist = for( row <- posGrid) yield {
@@ -91,11 +105,11 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
             }
             List(nodeId)::listoflist
 	    */
-            List(nodeId)::positionData.getGridList
+            List(nodeId)::gridList
           }
           //Start another column
           else {
-            val revGrid = positionData.getGridList.reverse
+            val revGrid = gridList.reverse
             val modRow = nodeId::(revGrid.head)
             val cutRevGrid = revGrid.tail
             val modRevGrid = modRow::cutRevGrid
@@ -112,9 +126,9 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
 
   //This fxn returns the list of neighbor ids
   def getNeighbors(nodeId:String):Option[List[Any]] = {
-    val gridArray = positionData.getGridArray
-    if( gridArray.isEmpty) {
-      logger.info("getNeighbors has an empty gridArray")
+    //val gridArray = positionData.getGridArray
+    if( gridList.isEmpty) {
+      logger.info("getNeighbors has an empty gridList")
       None
     }
     else {
@@ -177,7 +191,6 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
 
   //find the row and col that contains the target node id - start from zero
   private def findPos(nId:String):Option[Tuple2[Int,Int]] = {
-    val gridArray = positionData.getGridArray
     def chkElement(row:Int, col:Int):Option[Tuple2[Int,Int]] = {
       //check boundary
       if( row >= gridArray.length) None
@@ -196,7 +209,6 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
 
   //Insert a new row betw top and bot rows
   private def insertRow( top:Int, bot:Int, levelNodes:List[Node] ):Unit = {
-    val gridArray = positionData.getGridArray
     //Create array to hold new node ids for the new row in the map
     try {
     val iRow = new Array[String](gridArray(0).length)
@@ -243,7 +255,6 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
   private def insertCol( rt:Int, lf:Int, levelNodes:List[Node] ):Unit = {
     //Each row in the position map needs to have a new element added.
     //The new element is added between 'rt' and 'lf' parameters.
-    val gridArray = positionData.getGridArray
     try {
     logger.debug("Inserting a new column")
     val arrayOfLists = for( row <- gridArray ) yield {

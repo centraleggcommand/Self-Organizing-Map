@@ -35,7 +35,6 @@ class MapDisplay {
   def getMap(dbName:String, parent:String) = {
     //do some update of state
     val currMapStack = mapStackVar.is
-    logger.debug("prevDbVar: " + prevDbVar.is)
     if( dbName != prevDbVar.is) {
       currMapStack.clear
       currentMapVar(Nil)
@@ -65,7 +64,6 @@ class MapDisplay {
     }
     dbAgent.shutdown
     currentMapVar( infoDisplay)
-    logger.debug("currentMapVar now has: " + currentMapVar.is)
     mapStackVar(currMapStack)
     prevDbVar(dbName)
     JsCmds.SetHtml(mapDisplayId, infoDisplay)
@@ -77,7 +75,6 @@ class MapDisplay {
       currentMapVar( currMapStack.top)
       currMapStack.pop
       mapStackVar(currMapStack)
-      logger.debug("Getting previous map: " + currentMapVar.is)
       JsCmds.SetHtml(mapDisplayId, currentMapVar.is)
     }
     else JsCmds.SetHtml(mapDisplayId, Text("No previous map"))

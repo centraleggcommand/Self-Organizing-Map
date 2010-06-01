@@ -312,7 +312,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           val jsstr = content.replaceAll("\"","'")
           val jdata5 = jdata4.addField(("content",jsstr))
           val jsonData = jdata5.toJson
-          logger.debug("adding entry: " + jsonData)
           val response = dbPut(addr, jsonData)
           val rdat = JSON.parse(response)
           rdat match {
@@ -535,7 +534,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       val req = couchUri + "/" + dbName + "/" + dbView + "/_view/" + allMapsView
       val jsonData = dbGet( req )
       val data = JSON.parse(jsonData)
-      logger.debug("db get allmaps: " + data)
       data match {
         case Some(List(("error",_),("reason",r:String))) => {
           logger.error("getPositionMapTree db error: " + r)
@@ -573,7 +571,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           //Send info back to database
           val jdata1 = new JsObject(uDoc)
           val jsonSend = jdata1.toJson
-          logger.debug("substituteField info: " + jsonSend)
           val response = dbPut(revRequest, jsonSend)
           val rdat = JSON.parse(response)
           rdat match {
@@ -660,7 +657,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
         case Some(List(_,_,("rows", Nil))) => None
         //extract data
         case Some(List(_,_,("rows", data:List[_]))) => { 
-          logger.debug("need to extract entry: " + data)
           val scData = for( List(("id",id:String),("key",_),("value",List(subject:String,content:String))) <- data) yield {
             (id,subject,content)
           }
@@ -683,7 +679,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
       val jsonData = dbGet(couchUri + "/" + dbName + "/" + nodeId)
       //convert the json data
       val data = JSON.parse(jsonData)
-      logger.debug("node parent: " + data)
       data match {
         //check if the db fxn existed
         case Some(List(("error",_),("reason",r:String))) => {
@@ -732,7 +727,6 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           logger.debug("Creating views")
           val fxnObj = new JsObject(JsFxn.getInitView(dbView,dbName,parentWeightView,wordView,childView,posView,nodePosView,allMapsView,entryDevView,entrySCView,tallyView))
           val jsonData = fxnObj.toJson
-          logger.debug("Inserting json for db views: " + jsonData)
           val response = dbAuthPut(couchUri + "/" + dbName + "/" + dbView, jsonData)
           JSON.parse(response) match {
             //just logging any error but no resolution

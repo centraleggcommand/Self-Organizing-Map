@@ -283,7 +283,6 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
         case Some(id) => {
           logger.debug("added column node: " + id)
           val freshrow = (row.take(lf+1).toList):::id::(row.drop(lf+1)).toList
-          logger.debug("fresh row: " + freshrow)
           freshrow
 	}
         case None => {

@@ -51,41 +51,43 @@ sealed case class Node(id:String, weight:Map[String,Double])
     m ++ w
   }
 
-  //This returns the distance between the node and another weight.
-  //If the weight is empty, then a 'None' value is returned.
+  //Calculate a point value based on the words that match between this node
+  //and the comparison weight.
   def calcNodeDistance( cmpWeight:Map[String,Double], dbAgent:SomDbAgent ):Double = {
-    //Calculate the euclidean distance between weights.
-    //Each word in the node's weight is searched for in the other weight,
-    //and a zero value is used if it doesn't exist.
-    val calcDiff = for( (word,count) <- weight) yield {
-      //the node weight is converted to an average over the total
-      //number of docs, then the offset is calculated
-      val childNum = dbAgent.getChildDocNum(id) match {
+
+    val childNum = dbAgent.getChildDocNum(id) match {
         case Some(n) => n
         case None => 1.0
-      }
-      val avgWordWeight = count/childNum
-      val wc:Double = dbAgent.getGlobalWordCount(word) match {
-        case Some(num) => num
-        case None => 1.0
-      }
-      val nodeWordOffset = offsetWeight(avgWordWeight, wc)
+    }
+    var score = 0.0
+    val calcDiff = for( (word,count) <- weight) {
+      //the node weight is converted to an average over the total
+      //number of docs, then the offset is calculated
       if( cmpWeight.contains(word)) {
+        val gwc:Double = dbAgent.getGlobalWordCount(word) match {
+          case Some(num) => num
+          case None => 1.0
+        }
+        val avgWordWeight = count/childNum
+        val nodeWordOffset = offsetWeight(avgWordWeight, gwc)
         val cmpWordCount:Double = cmpWeight(word)
-        val cmpWordOffset = offsetWeight(cmpWordCount, wc)
-        val sqdiff = pow((nodeWordOffset - cmpWordOffset),2)
-        (word -> sqdiff)
+        val cmpWordOffset = offsetWeight(cmpWordCount, gwc)
+        score = score + nodeWordOffset + cmpWordOffset
+        //val sqdiff = pow((nodeWordOffset - cmpWordOffset),2)
+        //(word -> sqdiff)
       }
-      else {
-        val sqdiff = pow(nodeWordOffset,2)
-        (word -> sqdiff)
-      }
+      //else {
+        //val sqdiff = pow(nodeWordOffset,2)
+        //(word -> sqdiff)
+      //}
     }
     //finish euclidean distance calc on squared differences in the map
-    val sumDiff = calcDiff.reduceLeft((x,y) => ("result",x._2 + y._2))
-    sqrt(sumDiff._2)
+    //val sumDiff = calcDiff.reduceLeft((x,y) => ("result",x._2 + y._2))
+    //sqrt(sumDiff._2)
+    score
   }
 
+/*
   private def myAvgWeight(dbAgent:SomDbAgent):Map[String,Double] = {
     val childNum = dbAgent.getChildDocNum(id) match {
       case Some(n) => n
@@ -107,5 +109,6 @@ sealed case class Node(id:String, weight:Map[String,Double])
     val offsetList = calcOffsetWeight(myAvgWeight(dbAgent),dbAgent).toList
     offsetList.sort((x,y)=>x._2 < y._2).take(5).map(x=>x._1)
   }
+  */
 
 }

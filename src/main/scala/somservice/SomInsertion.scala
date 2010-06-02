@@ -124,8 +124,8 @@ class SomInsertion(data:SomEntry)
         }
       }
       val starter = rankList.head
-      //return the tuple with smallest distance from node
-      Some(rankList.foldLeft(starter())(compareDistance _))
+      //return the tuple with highest score
+      Some(rankList.foldLeft(starter())(compareScore _))
     }
 
   } catch {
@@ -140,10 +140,10 @@ class SomInsertion(data:SomEntry)
   }
   }
 
-  private def compareDistance(t1:Tuple2[Node,Double],f2:Future[Tuple2[Node,Double]]):Tuple2[Node,Double] = {
+  private def compareScore(t1:Tuple2[Node,Double],f2:Future[Tuple2[Node,Double]]):Tuple2[Node,Double] = {
     val t2 = f2()
-    logger.debug("Distance from node: " + t2._1.id + " is " + t2._2)
-    if( t1._2 < t2._2) t1
+    logger.debug("Score for node: " + t2._1.id + " is " + t2._2)
+    if( t1._2 > t2._2) t1
     else t2
   }
 

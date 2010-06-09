@@ -119,14 +119,22 @@ class SomInsertion(data:SomEntry)
 
     if( nodes.isEmpty) None
     else {
+/*
       val rankList = for( node <- nodes ) yield {
         future[Tuple2[Node,Double]] {
           (node, node.calcNodeDistance( ticket.wordMap, dbAgent))
         }
       }
+      */
+      //Using a non-Actor approach until I can understand the potential
+      //performance hazards in the library.
+      val rankList = for( node <- nodes) yield {
+        (node, node.calcNodeDistance( ticket.wordMap, dbAgent))
+      }
       val starter = rankList.head
       //return the tuple with highest score
-      Some(rankList.foldLeft(starter())(compareScore _))
+      //Some(rankList.foldLeft(starter())(compareScore _))
+      Some(rankList.foldLeft(starter)(compareScore _))
     }
 
   } catch {
@@ -141,9 +149,16 @@ class SomInsertion(data:SomEntry)
   }
   }
 
+/*
   private def compareScore(t1:Tuple2[Node,Double],f2:Future[Tuple2[Node,Double]]):Tuple2[Node,Double] = {
     val t2 = f2()
     logger.debug("Score for node: " + t2._1.id + " is " + t2._2)
+    if( t1._2 > t2._2) t1
+    else t2
+  }
+  */
+  private def compareScore( t1:Tuple2[Node,Double], t2:Tuple2[Node,Double]) : Tuple2[Node,Double] = {
+    logger.debug("Score for node " + t2._1.id + " is " + t2._2)
     if( t1._2 > t2._2) t1
     else t2
   }

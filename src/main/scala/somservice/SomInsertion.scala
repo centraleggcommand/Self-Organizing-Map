@@ -45,16 +45,17 @@ class SomInsertion(data:SomEntry)
 
   //run the som algorithm on the entry and associate with a node
   private def organizeEntry(startNode:String):Unit = {
-    //Obtain a node id and the entry's distance from it.
+    //Obtain a node id and the entry's score against it.
     cycleThruLevels( startNode, startNode, 0.0) match {
-      case Some((nodeId:String,dist:Double)) => {
-          dbAgent.addEntry(nodeId, dist, subject, origContent)
+      case Some((nodeId:String,score:Double)) => {
+          dbAgent.addEntry(nodeId, score, subject, origContent)
           dbAgent.getParentNode( nodeId) match {
             case Some(id:String) => dbAgent.updateTally( id, false)
             case None => //do nothing
 	  }
           val expansion = new SomExpansion(dbAgent)
           expansion.checkExpansion(nodeId)
+          expansion.cleanup
       }
       case None => logger.info("Could not insert entry")
     }
@@ -72,7 +73,7 @@ class SomInsertion(data:SomEntry)
   }
 
   //compare the entry weight to node weights at each required level
-  private def cycleThruLevels(startNode:String, parent:String, lastDistance:Double):Option[Tuple2[String,Double]] = {
+  private def cycleThruLevels(startNode:String, parent:String, lastScore:Double):Option[Tuple2[String,Double]] = {
     //level zero map nodes have the db name as the parent value
     dbAgent.getNodesUsingParent(parent) match {
       case None => {
@@ -85,7 +86,7 @@ class SomInsertion(data:SomEntry)
           }
         }
         //No sub levels, return this node id for entry's parent info
-        else Some((parent,lastDistance))
+        else Some((parent,lastScore))
       }
       case Some(levelNodes) => {
         //Does the map layer have minimum number of nodes?
@@ -101,10 +102,10 @@ class SomInsertion(data:SomEntry)
           val matchedNode = cycleThruNodes( levelNodes)
           matchedNode match {
             case None => None
-            case Some((node,dist)) => {
+            case Some((node,score)) => {
               val upNode = node.updateWeight( ticket.wordMap)
               dbAgent.updateNode( upNode)
-              cycleThruLevels( startNode, node.id, dist)
+              cycleThruLevels( startNode, node.id, score)
             }
           } 
         }

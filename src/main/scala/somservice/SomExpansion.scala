@@ -31,10 +31,10 @@ class MapData( dbAgent:SomDbAgent)
 
 class SomExpansion(dbAgent:SomDbAgent)
 {
-  val initErr_c = 2.5
-  val levelMin_c = 4.0
-  val hzMin_c = 1.5
-  val expPercent = 0.75
+  val levelMin_c = 4.0 //min number of nodes to expand vertically
+  val initScore_c = 2.0 //min score to expand horizontally
+  val hzMin_c = 1.5 //min number of entries per node
+  val expPercent_c = 1.2 //percent increase in score to expand vertically
   val logger = Logger.getLogger("somservice.SomExpansion")
   PropertyConfigurator.configure("log4j.properties")
 
@@ -43,8 +43,8 @@ class SomExpansion(dbAgent:SomDbAgent)
   def checkExpansion(winnerNodeId:String):Unit = {
     //get data about all the map levels
 
-          //The winner node is checked for vertical expansion.
-          //Check if the node has already expanded 
+       //The winner node is checked for vertical expansion.
+       //Check that the winner is a leaf node.
        val mapData = new MapData( dbAgent)
        val leafParentNodes = mapData.getLeafParentIds
        val parentNodeId = dbAgent.getParentNode( winnerNodeId) match {
@@ -54,53 +54,55 @@ class SomExpansion(dbAgent:SomDbAgent)
        if( leafParentNodes.exists((x)=>x==winnerNodeId) ) {
          logger.error("An entry was added to a non-leaf node")
        }
-       else if( dbAgent.getChildDocNum(winnerNodeId) match {
+       else {
+         if( dbAgent.getChildDocNum(winnerNodeId) match {
                 case Some(num:Double) => if( num < levelMin_c) true else false
                 case None => true } ) {
-         //Don't vertically expand if a node has less than 4 entries
-         chkHorizontalExp( parentNodeId)
-       }
-       else {   
-            //The first level map is compared to a deviation const
+           //Don't vertically expand if a node has less than 4 entries
+           chkHorizontalExp( parentNodeId)
+         }
+         else {   
             val parentId = dbAgent.getParentNode( winnerNodeId) match {
               case Some(id) => id
               case None => ""
             }
+            //The first level map is compared to a deviation const
             if( parentId == dbAgent.getDbName) {
               val nodeDeviations = getNodeDeviations(parentId) match {
                 case Some(dev) => dev
                 case None => Nil
               }
               val size = nodeDeviations.length
-              val avgMapError:Double = (nodeDeviations.foldLeft(0.0)((x,y)=>y._2 + x)) / size
-              val winnerErr:Double = nodeDeviations.find({case (x,y) => {if(x.id == winnerNodeId) true else false}}) match {
+              val avgMapScore:Double = (nodeDeviations.foldLeft(0.0)((x,y)=>y._2 + x)) / size
+              val winnerScore:Double = nodeDeviations.find({case (x,y) => {if(x.id == winnerNodeId) true else false}}) match {
                 case Some((node,err)) => err
-                case None => 1000.0
+                case None => 0.0
               }
-              logger.debug("Vertical expansion calc: map error= " + avgMapError + " winnerErr= " + winnerErr)
-              if( (avgMapError < initErr_c) && (winnerErr > avgMapError)) {
-	      //grow another level for nodes that have more error
+              logger.debug("Vertical expansion calc: map score= " + avgMapScore + ", winnerScore= " + winnerScore)
+              if( (avgMapScore >= initScore_c) && (winnerScore > 0) ) {
 	        verticalExp(winnerNodeId)
               }
               else chkHorizontalExp( parentNodeId)
             }
             //Non-first level nodes are compared against parent node
             else if( parentId != "") {
-              val parentDeviation = dbAgent.getAvgNodeDeviation( parentId) match {
-                case Some(num:Double) => num
-                case None => 0.1 //this prevents expansion
-              }
-              val winnerDeviation = dbAgent.getAvgNodeDeviation( winnerNodeId) match {
-                case Some(num:Double) => num
-                case None => 1000.0 //this prevents expansion
-              }
-              if( (winnerDeviation/parentDeviation) < expPercent) {
-                verticalExp(winnerNodeId)
-              }
-              else chkHorizontalExp( parentNodeId)
-            }
-          }
-//	}
+              dbAgent.getAvgNodeDeviation( parentId) match {
+                case Some(parentScore:Double) => {
+                  val winnerScore = dbAgent.getAvgNodeDeviation( winnerNodeId) match {
+                    case Some(n:Double) => n
+                    case None => 0.0
+                  }
+                  //winner node must have increase in score by expPercent_c
+                  if( (winnerScore/parentScore) > expPercent_c) {
+                    verticalExp(winnerNodeId)
+                  }
+                  else chkHorizontalExp( parentNodeId)
+		}
+                case None => //do nothing
+             }
+           }
+	}
+       }
 //	case _ => logger.info("checkExpansion could not recognize data")
 //      }
   }
@@ -135,8 +137,8 @@ class SomExpansion(dbAgent:SomDbAgent)
     }
     if( numNodes > 0) {
       dbAgent.getTally(parentNodeId) match {
-        case Some(tally) => if( tally > (hzMin_c*numNodes) ) expandLevel( parentNodeId)
-                            else logger.debug("Not horizontally expandin with tally: " + tally)
+        case Some(tally:Double) => if( tally > (hzMin_c*numNodes) ) expandLevel( parentNodeId)
+                            else logger.debug("Not horizontally expanding with tally: " + tally)
         case None => logger.debug("Not horizontally expanding - no tally")
       }
     }
@@ -151,7 +153,7 @@ class SomExpansion(dbAgent:SomDbAgent)
           case None => Nil
         }
         val sortedNodeDev = nodeDeviations.sort((x,y) => x._2 < y._2)
-        val errorNode = sortedNodeDev.last._1
+        val errorNode = sortedNodeDev.head._1 //lowest scoring node
         val posMap = new MapPosition(dbAgent, parentNodeId)
         posMap.getNeighbors(errorNode.id) match {
           case None =>
@@ -168,7 +170,7 @@ class SomExpansion(dbAgent:SomDbAgent)
               }
             }
             val sortedNodes = nodeDistances.sort((x:Tuple2[_,Double],y:Tuple2[_,Double]) => x._2 < y._2)
-            val distantNode = sortedNodes.last._1
+            val distantNode = sortedNodes.head._1
             //Add a row or column betw error node and distant node
             val levelNodes = for( (node,num) <- nodeDeviations) yield node
             posMap.expand(errorNode, distantNode, levelNodes)

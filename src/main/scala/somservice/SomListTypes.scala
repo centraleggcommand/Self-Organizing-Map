@@ -25,7 +25,6 @@ case class PositionData( id:String,grid:List[_]) extends ListType
           }
         }
         if( tmpList.length > 0 ) {
-          logger.debug("creating position data row: " + tmpList.toList)
           gridList += tmpList.toList
           //gridArray(counter) = tmpList.toArray
           //counter = counter + 1

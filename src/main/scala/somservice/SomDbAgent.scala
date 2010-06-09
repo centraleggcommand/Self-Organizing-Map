@@ -393,7 +393,7 @@ class CouchAgent(dbn:String) extends SomDbAgent(dbn)
           var count = 0.0
           for{ (nid:String,t:Double) <- tally
                 if nid == parentNode} {
-            count = t+1
+            count = t
 	  }
           if( count > 0 ) Some(count)
           else None

@@ -162,25 +162,17 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
     val errPos = findPos( errNode.id)
     val neighborPos = findPos( neighbor.id)
     errPos match {
-      case None => //do nothing
+      case None => logger.error("Position data not found for node: " + errNode.id)
       case Some((eRow,eCol)) => {
         neighborPos match {
-          case None => //do nothing
+          case None => logger.error("Position data not found for node: " + neighbor.id)
           case Some((nRow,nCol)) => {
-            if( eRow < nRow) {
-              //Add row below error node
+            if( eRow != nRow) {
+              //Add row between error node and neighbor
               insertRow( eRow, nRow, levelNodes)
             }
-            else if( eRow > nRow) {
-              //Add row above error node
-              insertRow( nRow, eRow, levelNodes)
-            }
-            else if( eCol < nCol) {
-              //Add column to right of error node
-              insertCol( eCol, nCol, levelNodes)
-            }
             else {
-              //Add column to left of error node
+              //Add column between error node and neighbor
               insertCol( nCol, eCol, levelNodes)
             }
           }
@@ -208,9 +200,11 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
   }
 
   //Insert a new row betw top and bot rows
-  private def insertRow( top:Int, bot:Int, levelNodes:List[Node] ):Unit = {
+  private def insertRow( row1:Int, row2:Int, levelNodes:List[Node] ):Unit = {
     //Create array to hold new node ids for the new row in the map
     try {
+    val top = if(row1 > row2) row1 else row2
+    val bot = if(row1 > row2) row2 else row1 
     val iRow = new Array[String](gridArray(0).length)
     //Create nodes in db
     for( col <- 0 to iRow.length-1) {
@@ -252,11 +246,13 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
   }
   }
 
-  private def insertCol( rt:Int, lf:Int, levelNodes:List[Node] ):Unit = {
+  private def insertCol( col1:Int, col2:Int, levelNodes:List[Node] ):Unit = {
     //Each row in the position map needs to have a new element added.
     //The new element is added between 'rt' and 'lf' parameters.
     try {
     logger.debug("Inserting a new column")
+    val rt = if(col1 > col2) col1 else col2
+    val lf = if(col1 > col2) col2 else col1
     val arrayOfLists = for( row <- gridArray ) yield {
       //Create a new node using weights from rt an lf neighbor.
       val n1 = levelNodes.find((x)=>{x.id==row(rt)})

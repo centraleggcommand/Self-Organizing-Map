@@ -21,14 +21,10 @@ class EntryForm  {
     val dbAgent = new CouchAgent("nada")
     val availableDbs = dbAgent.getAllDbs
     dbAgent.shutdown
-    val initSelection = availableDbs match {
-                          case Nil => ""
-                          case a => a.head
-                        }
     val dbSelection = availableDbs.map(x=>(x,x))  
     //the following vars are used by handleSubmit fxn and populated
     //by the Lift bind
-    var dbName = initSelection
+    var dbName = ""
     var subject = ""
     var entry = ""
     def handleSubmit = {
@@ -41,16 +37,16 @@ class EntryForm  {
         logger.debug("Using insert weights: " + stemmedList)
         insertRequest.insertEntry
         insertRequest.cleanup
-        logger.debug("Inserting the entry: " + entry)
       }
       else logger.debug("Not inserting zero length entry")
     }
     bind("entry", entryData,
-      "db" -> SHtml.ajaxSelect(dbSelection, Full(initSelection), 
-        { sel => dbName = sel
-                 val selMap = new MapDisplay
-                 logger.debug("getMap being called")
-                 selMap.getMap( sel, sel)  }),
+      "db" -> SHtml.ajaxSelect(dbSelection, Empty, 
+              { sel => dbName = sel
+                val selMap = new MapDisplay
+                logger.debug("getMap being called")
+                selMap.getMap( sel, sel)  },
+              ("id","dbselect") ),
       "subject" -> SHtml.text( subject, subject = _),
       "content" -> SHtml.textarea( entry, entry = _, "cols"->"60", "rows"->"6"),
     "submit" -> SHtml.submit("Submit", handleSubmit _))

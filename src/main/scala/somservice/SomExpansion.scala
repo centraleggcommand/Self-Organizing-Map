@@ -137,8 +137,10 @@ class SomExpansion(dbAgent:SomDbAgent)
     }
     if( numNodes > 0) {
       dbAgent.getTally(parentNodeId) match {
-        case Some(tally:Double) => if( tally > (hzMin_c*numNodes) ) expandLevel( parentNodeId)
-                            else logger.debug("Not horizontally expanding with tally: " + tally)
+        case Some(tally:Double) => {
+          if( tally > (hzMin_c*numNodes) ) expandLevel( parentNodeId)
+          else logger.debug("Not horizontally expanding with tally: " + tally)
+	}
         case None => logger.debug("Not horizontally expanding - no tally")
       }
     }

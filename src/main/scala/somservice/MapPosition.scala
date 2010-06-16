@@ -304,13 +304,13 @@ case class MapPosition(dbAgent:SomDbAgent, parent:String) {
       else v
     }
     val cmbWeight = w1.transform(combine)
-    //add unique key/vals
-    val w2Keys = w2.keys
-    val tmpMap = mutable.Map.empty[String,Double]
-    for( word <- w2Keys) {
-      if( !cmbWeight.contains(word)) tmpMap += (word -> w2(word))
-    }
-    cmbWeight ++ tmpMap
+    val cmbIntersect = cmbWeight.filter((ele) => w2.contains(ele._1))
+    //take half of the unique keys from each maph
+    val w1Unique = w1.filter((ele) => !cmbIntersect.contains(ele._1))
+    val w2Unique = w2.filter((ele) => !cmbIntersect.contains(ele._1))
+    val w1UniqueCut = w1Unique.toList.drop(w1Unique.size/2)
+    val w2UniqueCut = w2Unique.toList.drop(w2Unique.size/2)
+    cmbIntersect ++ w1UniqueCut ++ w2UniqueCut
   }
 
 }
